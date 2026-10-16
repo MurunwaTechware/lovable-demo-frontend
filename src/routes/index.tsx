@@ -204,19 +204,7 @@ function Home() {
             {scanned ? (
               <MorphingTwin measurements={measurements} />
             ) : (
-              <>
-                <img src={twinImg} alt="Your Digital Body Twin" width={1200} height={1400} loading="lazy" className="h-full w-full object-cover mix-blend-screen opacity-90 blur-md" />
-                <div className="absolute inset-0 grid place-items-center bg-black/40 backdrop-blur-[2px] text-center p-6">
-                  <div>
-                    <div className="text-[11px] uppercase tracking-[0.3em] text-white/80">Locked</div>
-                    <div className="mt-2 font-display text-2xl text-white">Twin not scanned yet</div>
-                    <button onClick={() => setScanOpen(true)}
-                      className="mt-4 inline-flex items-center gap-2 rounded-full bg-white text-[color:var(--plum)] px-5 py-2.5 text-sm font-medium">
-                      <ScanLine className="h-4 w-4" /> Open camera to scan
-                    </button>
-                  </div>
-                </div>
-              </>
+              <img src={twinImg} alt="Your Digital Body Twin" width={1200} height={1400} loading="lazy" className="h-full w-full object-cover mix-blend-screen opacity-90 blur-md" />
             )}
           </div>
 
@@ -224,20 +212,17 @@ function Home() {
           <div>
             <SectionKicker>02 · Digital Twin & Fit Confidence</SectionKicker>
             <h2 className="mt-3 text-4xl md:text-5xl">Measurements you can <span className="italic">tune</span>.</h2>
-            <p className="mt-5 text-muted-foreground max-w-lg">
-              Fine-tune your twin with a tap. Every adjustment recalculates fit confidence across your wishlist in real time.
-            </p>
 
             {!scanned ? (
-              <div className="mt-8 rounded-2xl border border-dashed border-border bg-card/60 p-6">
-                <div className="text-sm text-muted-foreground">
+              <>
+                <p className="mt-5 text-muted-foreground max-w-lg">
                   Your measurements appear here once your body scan is complete. Press <span className="text-foreground font-medium">Start scan</span> to open the camera and capture your three poses.
-                </div>
+                </p>
                 <button onClick={() => setScanOpen(true)}
-                  className="mt-5 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-6 py-3 text-sm font-medium">
+                  className="mt-8 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-6 py-3 text-sm font-medium">
                   <ScanLine className="h-4 w-4" /> Start camera scan
                 </button>
-              </div>
+              </>
             ) : (
               <>
                 <div className="mt-8 grid sm:grid-cols-2 gap-4">
@@ -265,74 +250,6 @@ function Home() {
                 </div>
               </>
             )}
-          </div>
-        </div>
-      </section>
-
-
-      {/* AI STYLIST */}
-      <section id="stylist" className="mx-auto max-w-7xl px-6 py-24">
-        <div className="grid lg:grid-cols-[1.1fr_1fr] gap-12 items-start">
-          <div>
-            <SectionKicker>03 · AI Stylist</SectionKicker>
-            <h2 className="mt-3 text-4xl md:text-5xl">A stylist who <span className="italic">knows</span> your closet.</h2>
-            <p className="mt-5 text-muted-foreground max-w-lg">
-              Ask anything — weather-aware outfits, capsule wardrobes, gift ideas, tailor bookings. Your stylist replies with shoppable looks.
-            </p>
-
-            <div className="mt-6 grid sm:grid-cols-2 gap-3">
-              {[
-                ["Weather-aware", "Dresses you for the forecast — automatically."],
-                ["Capsule builder", "5-piece wardrobes for any brief."],
-                ["Tailor concierge", "Books alterations near you."],
-                ["Occasion mode", "Wedding, gala, hike — done in seconds."],
-              ].map(([t, d]) => (
-                <div key={t} className="rounded-2xl border border-border bg-card p-4">
-                  <div className="font-medium">{t}</div>
-                  <div className="mt-1 text-sm text-muted-foreground">{d}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-border bg-card shadow-[var(--shadow-lux)] overflow-hidden">
-            <div className="flex items-center gap-3 p-4 border-b border-border">
-              <div className="h-10 w-10 rounded-full grid place-items-center" style={{ background: "var(--gradient-plum)" }}>
-                <Bot className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <div className="font-medium text-sm">Mannequin Stylist</div>
-                <div className="text-xs text-muted-foreground flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Online · replies instantly
-                </div>
-              </div>
-            </div>
-            <div className="p-4 h-80 overflow-y-auto space-y-3">
-              {chat.map((m, i) => (
-                <div key={i} className={`flex ${m.from === "me" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${m.from === "me" ? "bg-primary text-primary-foreground rounded-br-md" : "bg-secondary text-secondary-foreground rounded-bl-md"}`}>
-                    {m.text}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="p-3 border-t border-border">
-              <div className="flex gap-2 mb-3 overflow-x-auto no-scrollbar">
-                {suggestions.map((s) => (
-                  <button key={s} onClick={() => sendChat(s)} className="whitespace-nowrap rounded-full border border-border bg-background px-3 py-1.5 text-xs hover:bg-accent">
-                    {s}
-                  </button>
-                ))}
-              </div>
-              <form onSubmit={(e) => { e.preventDefault(); sendChat(chatInput); }} className="flex gap-2">
-                <input value={chatInput} onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Ask your stylist…"
-                  className="flex-1 rounded-full border border-border bg-background px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[color:var(--plum)]/40" />
-                <button className="h-10 w-10 grid place-items-center rounded-full bg-primary text-primary-foreground">
-                  <Send className="h-4 w-4" />
-                </button>
-              </form>
-            </div>
           </div>
         </div>
       </section>

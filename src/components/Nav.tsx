@@ -1,34 +1,25 @@
 import { Link } from "@tanstack/react-router";
-import { Shirt, Moon, Sun, ShoppingBag, Heart, Menu, X, User, ShieldCheck, Settings, LogOut } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Shirt, Moon, Sun, ShoppingBag, Heart, Menu, X, User } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useShop } from "@/lib/shop-store";
+import { fullName, initials, useAccount, type Account } from "@/lib/account-store";
 
 const LINKS = [
   { to: "/stores", label: "Stores" },
-  { to: "/stylist", label: "Stylist & Journey" },
-  { to: "/tailors", label: "Tailors" },
   { to: "/community", label: "Community" },
 ] as const;
+
 
 
 export function Nav({ onOpenCart }: { onOpenCart?: () => void }) {
   const [dark, setDark] = useState(false);
   const [open, setOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const profileRef = useRef<HTMLDivElement>(null);
   const { cart, wishlist } = useShop();
+  const account = useAccount();
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
   }, [dark]);
-
-  useEffect(() => {
-    function onClick(e: MouseEvent) {
-      if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false);
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, []);
 
   return (
     <header className="fixed top-0 inset-x-0 z-40 glass border-b border-border">
@@ -41,8 +32,20 @@ export function Nav({ onOpenCart }: { onOpenCart?: () => void }) {
           <span className="sm:hidden">MQ<span className="text-[color:var(--plum)]">AI</span></span>
         </Link>
         <nav className="hidden lg:flex items-center gap-7 text-sm">
-          <Link to="/" hash="scan" className="text-muted-foreground hover:text-foreground transition">Scan</Link>
-          <Link to="/" hash="twin" className="text-muted-foreground hover:text-foreground transition">Twin</Link>
+          <Link
+            to="/scan"
+            className="text-muted-foreground hover:text-foreground transition"
+            activeProps={{ className: "text-foreground font-medium" }}
+          >
+            Scan
+          </Link>
+          <Link
+            to="/twin"
+            className="text-muted-foreground hover:text-foreground transition"
+            activeProps={{ className: "text-foreground font-medium" }}
+          >
+            Twin
+          </Link>
           {LINKS.map((l) => (
             <Link
               key={l.to}
@@ -81,38 +84,14 @@ export function Nav({ onOpenCart }: { onOpenCart?: () => void }) {
               {cart.length > 0 && <span className="ml-1 h-5 min-w-5 px-1 grid place-items-center rounded-full bg-[color:var(--plum)] text-white text-[10px]">{cart.length}</span>}
             </Link>
           )}
-          <div ref={profileRef} className="relative hidden lg:block">
-            <button
-              onClick={() => setProfileOpen((v) => !v)}
-              className="h-9 w-9 grid place-items-center rounded-full border border-border hover:bg-accent"
-              aria-label="Profile"
-              aria-expanded={profileOpen}
-            >
-              <User className="h-4 w-4" />
-            </button>
-            {profileOpen && (
-              <div className="absolute right-0 mt-2 w-64 rounded-2xl border border-border bg-background shadow-xl overflow-hidden z-50">
-                <div className="px-4 py-3 border-b border-border">
-                  <div className="text-sm font-medium">Your account</div>
-                  <div className="text-xs text-muted-foreground">Manage privacy & preferences</div>
-                </div>
-                <div className="py-1 text-sm">
-                  <Link to="/trust" onClick={() => setProfileOpen(false)} className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent">
-                    <ShieldCheck className="h-4 w-4 text-[color:var(--plum)]" /> Trust Centre
-                  </Link>
-                  <Link to="/privacy" onClick={() => setProfileOpen(false)} className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent">
-                    <Settings className="h-4 w-4" /> Privacy settings
-                  </Link>
-                  <Link to="/wishlist" onClick={() => setProfileOpen(false)} className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent">
-                    <Heart className="h-4 w-4" /> Wishlist
-                  </Link>
-                  <button className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-accent text-left text-muted-foreground">
-                    <LogOut className="h-4 w-4" /> Sign out
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          <Link
+            to="/account"
+            aria-label={account ? `Your account (${fullName(account)})` : "Your account"}
+            title={account ? `${fullName(account)}\n${account.email}` : "Your account"}
+            className="hidden lg:grid rounded-full outline-none ring-offset-2 ring-offset-background hover:ring-2 hover:ring-border focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Avatar account={account} size="h-9 w-9 text-sm" />
+          </Link>
           <button
             onClick={() => setOpen(!open)}
             className="lg:hidden h-9 w-9 grid place-items-center rounded-full border border-border hover:bg-accent"
@@ -125,6 +104,12 @@ export function Nav({ onOpenCart }: { onOpenCart?: () => void }) {
       {open && (
         <div className="lg:hidden border-t border-border bg-background/95 backdrop-blur">
           <nav className="mx-auto max-w-7xl px-6 py-4 flex flex-col gap-3 text-sm">
+            <Link to="/scan" onClick={() => setOpen(false)} className="py-1.5">
+              Scan
+            </Link>
+            <Link to="/twin" onClick={() => setOpen(false)} className="py-1.5">
+              Twin
+            </Link>
             {LINKS.map((l) => (
               <Link key={l.to} to={l.to} onClick={() => setOpen(false)} className="py-1.5">
                 {l.label}
@@ -142,21 +127,34 @@ export function Nav({ onOpenCart }: { onOpenCart?: () => void }) {
                 <ShoppingBag className="h-3.5 w-3.5" /> Cart {cart.length > 0 && <span className="text-[color:var(--plum)]">({cart.length})</span>}
               </Link>
             )}
-            <div className="border-t border-border pt-3 mt-1 flex flex-col gap-3">
-              <div className="text-xs uppercase tracking-wide text-muted-foreground inline-flex items-center gap-2"><User className="h-3.5 w-3.5" /> Your account</div>
-              <Link to="/trust" onClick={() => setOpen(false)} className="py-1.5 inline-flex items-center gap-2">
-                <ShieldCheck className="h-3.5 w-3.5 text-[color:var(--plum)]" /> Trust Centre
+            <div className="border-t border-border pt-3 mt-1">
+              <Link to="/account" onClick={() => setOpen(false)} className="py-1.5 inline-flex items-center gap-3">
+                <Avatar account={account} size="h-8 w-8 text-xs" />
+                <span>
+                  Your account
+                  {account && <span className="block text-xs text-muted-foreground">{account.email}</span>}
+                </span>
               </Link>
-              <Link to="/privacy" onClick={() => setOpen(false)} className="py-1.5 inline-flex items-center gap-2">
-                <Settings className="h-3.5 w-3.5" /> Privacy settings
-              </Link>
-              <button onClick={() => setOpen(false)} className="py-1.5 inline-flex items-center gap-2 text-left text-muted-foreground">
-                <LogOut className="h-3.5 w-3.5" /> Sign out
-              </button>
             </div>
           </nav>
         </div>
       )}
     </header>
+  );
+}
+
+// Like a Google account without a profile picture: initials on a coloured circle. Shows the photo once there is one.
+export function Avatar({ account, size }: { account: Account | null; size: string }) {
+  if (account?.photoUrl) {
+    return <img src={account.photoUrl} alt="" className={`${size} rounded-full object-cover`} />;
+  }
+  return (
+    <span
+      aria-hidden="true"
+      className={`${size} grid place-items-center rounded-full font-medium text-white select-none`}
+      style={{ background: "var(--gradient-plum)" }}
+    >
+      {account ? initials(account) : <User className="h-4 w-4" />}
+    </span>
   );
 }
