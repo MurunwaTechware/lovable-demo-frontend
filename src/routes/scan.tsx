@@ -3,7 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import { Camera, Check, ImagePlus, Loader2, X, ArrowRight } from "lucide-react";
 
 import { Nav } from "@/components/Nav";
-import { SCAN_VIEW_LABELS, useTwin, type ScanView } from "@/lib/twin-store";
+import { useQueryClient } from "@tanstack/react-query";
+
+import { uploadScan, watchJob } from "@/lib/api";
+import { QUERY_KEYS, SCAN_VIEW_LABELS, type ScanView } from "@/lib/twin-store";
 
 export const Route = createFileRoute("/scan")({
   head: () => ({
@@ -37,7 +40,9 @@ type Errors = Partial<Record<ScanView | "gender" | "weight" | "age" | "form", st
 
 function ScanPage() {
   const navigate = useNavigate();
-  const { latest } = useTwin();
+  const queryClient = useQueryClient();
+  const stopWatching = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopWatching.current?.(), []);
   const [photos, setPhotos] = useState<Partial<Record<ScanView, Photo>>>({});
   const [feet, setFeet] = useState(5);
   const [inches, setInches] = useState(8);
@@ -102,10 +107,48 @@ function ScanPage() {
       return;
     }
 
-    // Demo: no backend yet. The real flow sends the photos and details to POST /process_upload, waits on
-    // /job_events/<job> for "ready", then opens /measurements?job=<job>. Here it pauses and opens the latest sample.
+    void startMeasuring(w, a);
+  };
+
+  // Sends the photos and details to POST /process_upload, waits on /job_events/<job> for the result,
+  // then opens /measurements?job=<job>. Measuring itself takes about 30 seconds.
+  const startMeasuring = async (weightKg: number, ageYears: number) => {
+    const fail = (message: string) => {
+      setMeasuring(false);
+      setErrors({ form: message });
+      setTimeout(
+        () =>
+          document
+            .querySelector("[data-invalid='true']")
+            ?.scrollIntoView({ behavior: "smooth", block: "center" }),
+        0,
+      );
+    };
+
+    const form = new FormData();
+    for (const v of VIEWS) form.append(v, photos[v]!.file);
+    form.append("height_cm", String(heightCm));
+    form.append("weight_kg", String(weightKg));
+    form.append("gender", gender);
+    form.append("age", String(ageYears));
+
     setMeasuring(true);
-    setTimeout(() => navigate({ to: "/measurements", search: { job: latest?.jobId } }), 2500);
+    let jobId: string;
+    try {
+      ({ job_id: jobId } = await uploadScan(form));
+    } catch (err) {
+      return fail(err instanceof Error ? err.message : "Upload failed. Please try again.");
+    }
+    stopWatching.current = watchJob(jobId, {
+      ready: () => {
+        void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.profiles });
+        navigate({ to: "/measurements", search: { job: jobId } });
+      },
+      failed: (message) => {
+        void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.profiles });
+        fail(message);
+      },
+    });
   };
 
   return (

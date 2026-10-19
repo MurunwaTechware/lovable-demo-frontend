@@ -15,6 +15,7 @@ import {
   ImageUp,
   UserRound,
   Check,
+  Loader2,
 } from "lucide-react";
 
 import twinImg from "@/assets/twin.jpg";
@@ -61,7 +62,7 @@ export const Route = createFileRoute("/twin")({
 });
 
 function TwinPage() {
-  const { profiles, latest, tryOns, tryOnPhotos } = useTwin();
+  const { profiles, latest, tryOns, tryOnPhotos, isLoading, error } = useTwin();
   const earlier = profiles.filter((p) => p !== latest);
   // The ready profile before the latest one, to show what changed since
   const previous = earlier.find((p) => p.status === "ready") ?? null;
@@ -119,10 +120,34 @@ function TwinPage() {
           ))}
         </nav>
 
+        {error && (
+          <div
+            role="alert"
+            className="mt-6 rounded-2xl border border-[color:var(--plum)]/30 bg-[color:var(--plum)]/5 px-4 py-3 text-sm flex gap-3"
+          >
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-[color:var(--plum)]" />
+            <span>
+              <span className="font-medium">Couldn't load your twin.</span> {error}
+            </span>
+          </div>
+        )}
+        {isLoading && (
+          <p
+            className="mt-6 text-sm text-muted-foreground inline-flex items-center gap-2"
+            role="status"
+          >
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading your measurements and try-ons…
+          </p>
+        )}
+
         {/* Latest measurements */}
         <section id="measurements" className="mt-10 scroll-mt-24">
           <SectionTitle icon={<Ruler className="h-4 w-4" />} title="Latest measurements" />
-          {latest ? <LatestCard profile={latest} previous={previous} /> : <EmptyMeasurements />}
+          {latest ? (
+            <LatestCard profile={latest} previous={previous} />
+          ) : (
+            !isLoading && !error && <EmptyMeasurements />
+          )}
         </section>
 
         {/* The person photo try-ons use by default */}
@@ -153,7 +178,7 @@ function TwinPage() {
                 />
               ))}
             </div>
-          ) : (
+          ) : isLoading || error ? null : (
             <EmptyState
               icon={<Shirt className="h-5 w-5" />}
               title="No saved try-ons yet"
@@ -183,7 +208,7 @@ function TwinPage() {
                 <ProfileCard key={p.jobId} profile={p} />
               ))}
             </div>
-          ) : (
+          ) : isLoading || error ? null : (
             <p className="mt-4 text-sm text-muted-foreground">
               Your earlier scans will appear here.
             </p>
@@ -207,7 +232,13 @@ function LatestCard({
 }) {
   return (
     <div className="mt-6 grid lg:grid-cols-[340px_1fr] rounded-3xl border border-border bg-card shadow-[var(--shadow-card)] overflow-hidden">
-      <ScanPhotos photos={profile.photos} date={formatDate(profile.created)} />
+      {profile.photos.length ? (
+        <ScanPhotos photos={profile.photos} date={formatDate(profile.created)} />
+      ) : (
+        <div className="aspect-[3/4] lg:aspect-auto lg:min-h-[520px] bg-secondary grid place-items-center text-sm text-muted-foreground">
+          No photos
+        </div>
+      )}
 
       <div className="p-6 md:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -229,7 +260,8 @@ function LatestCard({
               <Ruler className="h-4 w-4" /> Full results
             </Link>
             <Link
-              to="/stores"
+              to="/tryon"
+              search={{ job: profile.jobId }}
               className="rounded-full bg-primary text-primary-foreground px-5 py-2.5 text-sm font-medium inline-flex items-center gap-2"
             >
               Try clothes on <ArrowRight className="h-4 w-4" />
@@ -788,12 +820,14 @@ function ProfileCard({ profile }: { profile: MeasurementProfile }) {
   return (
     <article className="rounded-3xl overflow-hidden bg-card border border-border shadow-[var(--shadow-card)]">
       <div className="relative aspect-[4/5] bg-secondary">
-        <img
-          src={profile.photos[0].src}
-          alt="Front photo from this scan"
-          loading="lazy"
-          className={`h-full w-full object-cover ${failed ? "grayscale opacity-70" : ""}`}
-        />
+        {profile.photos[0] && (
+          <img
+            src={profile.photos[0].src}
+            alt="Front photo from this scan"
+            loading="lazy"
+            className={`h-full w-full object-cover ${failed ? "grayscale opacity-70" : ""}`}
+          />
+        )}
         {failed && (
           <div className="absolute top-3 left-3 rounded-full bg-background/90 px-3 py-1 text-[11px] font-medium inline-flex items-center gap-1.5">
             <AlertTriangle className="h-3 w-3 text-[color:var(--plum)]" /> Measuring failed
@@ -832,7 +866,8 @@ function ProfileCard({ profile }: { profile: MeasurementProfile }) {
                 <Ruler className="h-3.5 w-3.5" /> Measurements
               </Link>
               <Link
-                to="/stores"
+                to="/tryon"
+                search={{ job: profile.jobId }}
                 className="rounded-full border border-border px-4 py-2 text-xs font-medium inline-flex items-center gap-1.5 hover:bg-accent"
               >
                 <Shirt className="h-3.5 w-3.5" /> Try on

@@ -1,17 +1,22 @@
-// Data for the /twin page: the user's measurement profiles and saved try-ons.
-//
-// MOCK DATA until the backend is connected. The shapes mirror the backend's responses, so wiring it up
-// means replacing useTwin() with fetches and keeping the page as it is:
+// Data for the /twin, /measurements and /scan pages: the user's measurement profiles and saved try-ons,
+// fetched from the backend (lib/api.ts) and turned into the app's camelCase types:
 //   GET /me/measurement-profiles      → MeasurementProfile[] (without measurementsCm and warnings)
 //   GET /measurements_data/{job_id}   → measurementsCm, warnings (the profile's measurement.json)
 //   GET /me/saved-tryons              → SavedTryOn[]
-//   try-on photos                     → not in the backend yet (see TryOnPhotos)
-// Field names are camelCased here; the backend sends snake_case (job_id, measurements_cm, ...).
+//   try-on photos                     → MOCK: not in the backend yet (see TryOnPhotos)
 
-import heroImg from "@/assets/hero.jpg";
-import signupImg from "@/assets/signup-visual.jpg";
-import coatImg from "@/assets/p1.jpg";
+import { useQueries, useQuery } from "@tanstack/react-query";
+
+import personImg from "@/assets/tryon-person.jpg";
 import closeUpImg from "@/assets/tryon-closeup.jpg";
+import {
+  getMeasurement,
+  getProfiles,
+  getSavedTryOns,
+  type BackendMeasurement,
+  type BackendProfile,
+  type BackendSavedTryOn,
+} from "@/lib/api";
 
 export type MeasurementKey =
   | "neck_circ"
@@ -41,11 +46,11 @@ export type MeasurementProfile = {
     weightKg: number;
     gender: "male" | "female" | "neutral";
     age: number;
-  };
+  } | null; // null only if the job's inputs.json couldn't be read
   bodyShape?: { build: string; torsoPercent: number };
   measurementsCm?: Record<MeasurementKey, number>;
   warnings?: string[]; // what made the estimate less certain, from the model
-  photos: ScanPhoto[]; // always the three views, in the order they were taken
+  photos: ScanPhoto[]; // the views the backend has, in the order they were taken
 };
 
 export type ScanView = "front" | "left" | "right";
@@ -139,109 +144,148 @@ export const MEASUREMENT_GROUPS: {
   },
 ];
 
-// The demo uses one image for all three views; the backend serves front.*, left.* and right.*
-const scanPhotos = (src: string): ScanPhoto[] =>
-  (["front", "left", "right"] as const).map((view) => ({ view, src }));
+// ── From the backend's shapes ─────────────────────────────────────────────────
 
-// Sample people and numbers only, not anyone's real measurements
-const PROFILES: MeasurementProfile[] = [
-  {
-    jobId: "20261012-091522-4c7a21",
-    created: "2026-10-12T09:15:22",
-    status: "ready",
-    inputs: { heightCm: 168, weightKg: 61, gender: "female", age: 27 },
-    bodyShape: { build: "Slim", torsoPercent: 49 },
-    measurementsCm: {
-      neck_circ: 33.5,
-      shoulder_breadth: 39.0,
-      bust_chest_circ: 88.0,
-      waist_circ: 70.5,
-      hip_circ: 95.0,
-      thigh_circ: 54.0,
-      calf_circ: 35.5,
-      bicep_circ: 27.0,
-      forearm_circ: 23.5,
-      wrist_circ: 15.0,
-      ankle_circ: 21.5,
-      upper_arm_length: 31.5,
-      lower_arm_length: 25.0,
-      upper_leg_length: 44.0,
-      lower_leg_length: 41.5,
-      nape_to_waist: 40.5,
-    },
-    warnings: ["The jacket hides the waist, so the waist estimate is less precise."],
-    photos: scanPhotos(heroImg),
-  },
-  {
-    jobId: "20261008-085204-a1b2c3",
-    created: "2026-10-08T08:52:04",
-    status: "ready",
-    inputs: { heightCm: 168, weightKg: 62, gender: "female", age: 27 },
-    bodyShape: { build: "Average", torsoPercent: 50 },
-    measurementsCm: {
-      neck_circ: 34.0,
-      shoulder_breadth: 39.5,
-      bust_chest_circ: 89.5,
-      waist_circ: 72.0,
-      hip_circ: 96.0,
-      thigh_circ: 55.0,
-      calf_circ: 36.0,
-      bicep_circ: 27.5,
-      forearm_circ: 24.0,
-      wrist_circ: 15.0,
-      ankle_circ: 21.5,
-      upper_arm_length: 31.5,
-      lower_arm_length: 25.0,
-      upper_leg_length: 44.0,
-      lower_leg_length: 41.5,
-      nape_to_waist: 40.5,
-    },
-    warnings: [],
-    photos: scanPhotos(heroImg),
-  },
-  {
-    jobId: "20261005-174410-9b41ee",
-    created: "2026-10-05T17:44:10",
-    status: "failed",
-    error: "The model blocked these photos for safety reasons. Try different photos.",
-    inputs: { heightCm: 168, weightKg: 62, gender: "female", age: 27 },
-    photos: scanPhotos(heroImg),
-  },
-];
+const SCAN_VIEWS: ScanView[] = ["front", "left", "right"];
 
-const TRYONS: SavedTryOn[] = [
-  {
-    savedId: "20261012-093112-c19d72",
-    saved: "2026-10-12T09:31:12",
-    measurementProfile: "20261012-091522-4c7a21",
-    result: signupImg,
-    person: heroImg,
-    items: [{ category: "Outerwear", image: coatImg }],
-  },
-];
-
-// The close-up is cropped from the same sample photo for the demo
-const TRY_ON_PHOTOS: TryOnPhotos = {
-  full_body: { src: heroImg, updated: "2026-10-12T09:20:00" },
-  close_up: { src: closeUpImg, updated: "2026-10-12T09:21:00" },
+// Garment slots as the try-on page names them
+const SLOT_LABELS: Record<string, string> = {
+  top: "Top",
+  bottom: "Bottom",
+  headwear: "Headwear",
+  eyewear: "Eyewear",
 };
 
-const newestFirst = <T>(items: T[], key: (t: T) => string) =>
-  [...items].sort((a, b) => key(b).localeCompare(key(a)));
-
-export function useTwin() {
-  const profiles = newestFirst(PROFILES, (p) => p.created);
+function toInputs(i: BackendProfile["inputs"]): MeasurementProfile["inputs"] {
+  if (!i) return null;
   return {
-    profiles,
-    latest: profiles.find((p) => p.status === "ready") ?? null,
-    tryOns: newestFirst(TRYONS, (t) => t.saved),
-    tryOnPhotos: TRY_ON_PHOTOS,
+    heightCm: i.height_cm,
+    weightKg: i.weight_kg,
+    gender: i.gender as "male" | "female" | "neutral",
+    age: i.age,
   };
 }
 
-/** One profile by job ID, as GET /measurements_data/{job_id} would return it. undefined if it isn't theirs. */
-export function getProfile(jobId: string): MeasurementProfile | undefined {
-  return PROFILES.find((p) => p.jobId === jobId);
+function toProfile(p: BackendProfile, m?: BackendMeasurement): MeasurementProfile {
+  const photos = SCAN_VIEWS.flatMap((view) => {
+    const src = p.photos?.[view] ?? (view === "front" ? p.photo : null);
+    return src ? [{ view, src }] : [];
+  });
+  const shape = m?.body_shape ?? p.body_shape;
+  return {
+    jobId: p.job_id,
+    created: p.created,
+    status: p.status,
+    error: p.error ?? undefined,
+    inputs: toInputs(p.inputs ?? m?.inputs ?? null),
+    bodyShape: shape ? { build: shape.build, torsoPercent: shape.torso_percent } : undefined,
+    measurementsCm: m?.measurements_cm as MeasurementProfile["measurementsCm"],
+    warnings: m?.warnings,
+    photos,
+  };
+}
+
+function toSavedTryOn(t: BackendSavedTryOn): SavedTryOn {
+  return {
+    savedId: t.saved_id,
+    saved: t.saved,
+    measurementProfile: t.measurement_profile,
+    result: t.result ?? "",
+    person: t.person ?? "",
+    items: Object.entries(t.garments).map(([slot, image]) => ({
+      category: SLOT_LABELS[slot] ?? slot,
+      image,
+    })),
+  };
+}
+
+// Query keys, so pages can refresh a list after changing it (a new scan, a saved try-on)
+export const QUERY_KEYS = {
+  profiles: ["measurement-profiles"] as const,
+  savedTryOns: ["saved-tryons"] as const,
+  measurement: (jobId: string) => ["measurement", jobId] as const,
+};
+
+// One retry, not the default three: if the backend is down, say so within a couple of seconds
+const RETRY = 1;
+
+const measurementQuery = (jobId: string) => ({
+  retry: RETRY,
+  queryKey: QUERY_KEYS.measurement(jobId),
+  queryFn: () => getMeasurement(jobId),
+  staleTime: Infinity, // a profile's measurements never change once written
+});
+
+// MOCK until the backend can store them. Sample photos from the backend's test-images folder (ChatGPT).
+const TRY_ON_PHOTOS: TryOnPhotos = {
+  full_body: { src: personImg, updated: "2026-10-12T09:20:00" },
+  close_up: { src: closeUpImg, updated: "2026-10-12T09:21:00" },
+};
+
+const errorMessage = (e: unknown) => (e instanceof Error ? e.message : null);
+
+/** Everything the /twin page shows. Measurements are fetched for the latest two ready profiles. */
+export function useTwin() {
+  const profilesQ = useQuery({ queryKey: QUERY_KEYS.profiles, queryFn: getProfiles, retry: RETRY });
+  const tryOnsQ = useQuery({
+    queryKey: QUERY_KEYS.savedTryOns,
+    queryFn: getSavedTryOns,
+    retry: RETRY,
+  });
+  const list = profilesQ.data ?? [];
+  // The latest ready profile, and the one before it to show what changed
+  const ready = list.filter((p) => p.status === "ready").slice(0, 2);
+  const measurements = useQueries({ queries: ready.map((p) => measurementQuery(p.job_id)) });
+
+  const byJob = new Map<string, BackendMeasurement>();
+  measurements.forEach((q, i) => q.data && byJob.set(ready[i].job_id, q.data));
+  const profiles = list.map((p) => toProfile(p, byJob.get(p.job_id)));
+
+  return {
+    profiles,
+    latest: profiles.find((p) => p.status === "ready") ?? null,
+    tryOns: (tryOnsQ.data ?? []).map(toSavedTryOn),
+    tryOnPhotos: TRY_ON_PHOTOS,
+    isLoading: profilesQ.isLoading || tryOnsQ.isLoading || measurements.some((q) => q.isLoading),
+    error: errorMessage(
+      profilesQ.error ?? tryOnsQ.error ?? measurements.find((q) => q.error)?.error,
+    ),
+  };
+}
+
+/**
+ * One profile with its measurements, for /measurements. Without a job ID: the latest ready one.
+ * undefined once loaded means it doesn't exist, or belongs to someone else.
+ * While a job is still measuring, the list refreshes every few seconds.
+ */
+export function useMeasurementProfile(jobId?: string) {
+  const profilesQ = useQuery({
+    queryKey: QUERY_KEYS.profiles,
+    queryFn: getProfiles,
+    retry: RETRY,
+    refetchInterval: (q) =>
+      q.state.data?.some((p) => p.status === "measuring" && (!jobId || p.job_id === jobId))
+        ? 5000
+        : false,
+  });
+  const list = profilesQ.data ?? [];
+  const target = jobId
+    ? list.find((p) => p.job_id === jobId)
+    : list.find((p) => p.status === "ready");
+  const measurementQ = useQuery({
+    ...measurementQuery(target?.job_id ?? ""),
+    enabled: target?.status === "ready",
+  });
+  return {
+    profile: target ? toProfile(target, measurementQ.data) : undefined,
+    isLoading: profilesQ.isLoading || (target?.status === "ready" && measurementQ.isLoading),
+    error: errorMessage(profilesQ.error ?? measurementQ.error),
+  };
+}
+
+/** The user's saved try-on photos (MOCK, see TRY_ON_PHOTOS) */
+export function useTryOnPhotos() {
+  return TRY_ON_PHOTOS;
 }
 
 export function feetInches(cm: number) {
@@ -267,6 +311,7 @@ export function formatDate(iso: string) {
 }
 
 export function describeInputs(i: MeasurementProfile["inputs"]) {
+  if (!i) return "Details not available";
   const gender =
     i.gender === "neutral" ? "Gender not given" : i.gender[0].toUpperCase() + i.gender.slice(1);
   return `${i.heightCm} cm · ${i.weightKg} kg · ${gender} · ${i.age} years`;

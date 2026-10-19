@@ -6,14 +6,13 @@ import {
   MEASUREMENT_LABELS,
   feetInches,
   formatDate,
-  getProfile,
-  useTwin,
+  useMeasurementProfile,
   type MeasurementKey,
   type MeasurementProfile,
 } from "@/lib/twin-store";
 
 // The results page after a scan, recreated from the backend's /measurements?job=<id> page.
-// Demo: the profile comes from the mock data in twin-store. With the backend it's GET /measurements_data/{job}.
+// The profile comes from GET /me/measurement-profiles and its numbers from GET /measurements_data/{job}.
 export const Route = createFileRoute("/measurements")({
   validateSearch: (search: Record<string, unknown>): { job?: string } => ({
     job: typeof search.job === "string" ? search.job : undefined,
@@ -32,9 +31,8 @@ export const Route = createFileRoute("/measurements")({
 
 function MeasurementsPage() {
   const { job } = Route.useSearch();
-  const { latest } = useTwin();
   // No job in the address: show the latest profile, like opening "your measurements"
-  const profile = job ? getProfile(job) : (latest ?? undefined);
+  const { profile, isLoading, error } = useMeasurementProfile(job);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -50,7 +48,18 @@ function MeasurementsPage() {
         </p>
 
         <div className="mt-10 rounded-3xl border border-border bg-card p-6 md:p-10 shadow-[var(--shadow-card)]">
-          {!profile ? (
+          {isLoading ? (
+            <div className="py-16 text-center text-muted-foreground">
+              <Loader2 className="mx-auto h-8 w-8 animate-spin text-[color:var(--plum)]" />
+              <p className="mt-4">Loading your measurements…</p>
+            </div>
+          ) : error ? (
+            <Notice
+              icon={<AlertTriangle className="h-5 w-5" />}
+              title="Couldn't load your measurements"
+              text={error}
+            />
+          ) : !profile ? (
             <Notice
               icon={<ScanLine className="h-5 w-5" />}
               title={job ? "We couldn't find that scan" : "No measurements yet"}
@@ -88,7 +97,8 @@ function MeasurementsPage() {
             </Link>
             {profile?.status === "ready" ? (
               <Link
-                to="/stores"
+                to="/tryon"
+                search={{ job: profile.jobId }}
                 className="rounded-full bg-primary text-primary-foreground py-3.5 text-sm font-medium inline-flex items-center justify-center gap-2"
               >
                 Continue to try-on <ArrowRight className="h-4 w-4" />
@@ -117,13 +127,20 @@ function Results({
   measurements: Record<MeasurementKey, number>;
   bodyShape: NonNullable<MeasurementProfile["bodyShape"]>;
 }) {
-  const { heightCm, weightKg, gender, age } = profile.inputs;
-  const summary: [string, string, string?][] = [
-    ["Height", feetInches(heightCm), `${heightCm} cm`],
-    ["Weight", `${Math.round(weightKg)} kg`],
-    ["Gender", gender === "neutral" ? "Not given" : gender[0].toUpperCase() + gender.slice(1)],
-    ["Age", `${age} yrs`],
-  ];
+  const inputs = profile.inputs;
+  const summary: [string, string, string?][] = inputs
+    ? [
+        ["Height", feetInches(inputs.heightCm), `${inputs.heightCm} cm`],
+        ["Weight", `${Math.round(inputs.weightKg)} kg`],
+        [
+          "Gender",
+          inputs.gender === "neutral"
+            ? "Not given"
+            : inputs.gender[0].toUpperCase() + inputs.gender.slice(1),
+        ],
+        ["Age", `${inputs.age} yrs`],
+      ]
+    : [];
 
   return (
     <>

@@ -20,6 +20,7 @@ import { Route as ScanRouteImport } from './routes/scan'
 import { Route as StylistRouteImport } from './routes/stylist'
 import { Route as TailorsRouteImport } from './routes/tailors'
 import { Route as TrustRouteImport } from './routes/trust'
+import { Route as TryonRouteImport } from './routes/tryon'
 import { Route as TwinRouteImport } from './routes/twin'
 import { Route as WishlistRouteImport } from './routes/wishlist'
 import { Route as AccountIndexRouteImport } from './routes/account.index'
@@ -90,6 +91,11 @@ const TailorsRoute = TailorsRouteImport.update({
 const TrustRoute = TrustRouteImport.update({
   id: '/trust',
   path: '/trust',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TryonRoute = TryonRouteImport.update({
+  id: '/tryon',
+  path: '/tryon',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TwinRoute = TwinRouteImport.update({
@@ -185,6 +191,7 @@ export interface FileRoutesByFullPath {
   '/stylist': typeof StylistRoute
   '/tailors': typeof TailorsRoute
   '/trust': typeof TrustRoute
+  '/tryon': typeof TryonRoute
   '/twin': typeof TwinRoute
   '/wishlist': typeof WishlistRoute
   '/account/notifications': typeof AccountNotificationsRoute
@@ -212,6 +219,7 @@ export interface FileRoutesByTo {
   '/stylist': typeof StylistRoute
   '/tailors': typeof TailorsRoute
   '/trust': typeof TrustRoute
+  '/tryon': typeof TryonRoute
   '/twin': typeof TwinRoute
   '/wishlist': typeof WishlistRoute
   '/account/notifications': typeof AccountNotificationsRoute
@@ -242,6 +250,7 @@ export interface FileRoutesById {
   '/stylist': typeof StylistRoute
   '/tailors': typeof TailorsRoute
   '/trust': typeof TrustRoute
+  '/tryon': typeof TryonRoute
   '/twin': typeof TwinRoute
   '/wishlist': typeof WishlistRoute
   '/account/notifications': typeof AccountNotificationsRoute
@@ -273,6 +282,7 @@ export interface FileRouteTypes {
     | '/stylist'
     | '/tailors'
     | '/trust'
+    | '/tryon'
     | '/twin'
     | '/wishlist'
     | '/account/notifications'
@@ -300,6 +310,7 @@ export interface FileRouteTypes {
     | '/stylist'
     | '/tailors'
     | '/trust'
+    | '/tryon'
     | '/twin'
     | '/wishlist'
     | '/account/notifications'
@@ -329,6 +340,7 @@ export interface FileRouteTypes {
     | '/stylist'
     | '/tailors'
     | '/trust'
+    | '/tryon'
     | '/twin'
     | '/wishlist'
     | '/account/notifications'
@@ -359,6 +371,7 @@ export interface RootRouteChildren {
   StylistRoute: typeof StylistRoute
   TailorsRoute: typeof TailorsRoute
   TrustRoute: typeof TrustRoute
+  TryonRoute: typeof TryonRoute
   TwinRoute: typeof TwinRoute
   WishlistRoute: typeof WishlistRoute
   ProductIdRoute: typeof ProductIdRoute
@@ -443,6 +456,13 @@ declare module '@tanstack/react-router' {
       path: '/trust'
       fullPath: '/trust'
       preLoaderRoute: typeof TrustRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tryon': {
+      id: '/tryon'
+      path: '/tryon'
+      fullPath: '/tryon'
+      preLoaderRoute: typeof TryonRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/twin': {
@@ -613,6 +633,7 @@ const rootRouteChildren: RootRouteChildren = {
   StylistRoute: StylistRoute,
   TailorsRoute: TailorsRoute,
   TrustRoute: TrustRoute,
+  TryonRoute: TryonRoute,
   TwinRoute: TwinRoute,
   WishlistRoute: WishlistRoute,
   ProductIdRoute: ProductIdRoute,
