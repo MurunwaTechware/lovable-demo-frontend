@@ -6,8 +6,10 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
-// The FastAPI backend (gemini-ai-virtual-try-on). Override with BACKEND_URL if it runs elsewhere.
+// The FastAPI try-on backend (gemini-ai-virtual-try-on). Override with BACKEND_URL if it runs elsewhere.
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
+// The Superbalist products API (products_api.py). Override with PRODUCTS_API_URL if it runs elsewhere.
+const PRODUCTS_API_URL = process.env.PRODUCTS_API_URL ?? "http://localhost:8001";
 
 export default defineConfig({
   tanstackStart: {
@@ -26,6 +28,12 @@ export default defineConfig({
       proxy: {
         "^/(process_upload|job_events|measurements_data|defaults|try-on|me)(/.*)?$": {
           target: BACKEND_URL,
+        },
+        // Superbalist products API. The browser calls /api/products, /api/brands, ... and this
+        // forwards to the products service, stripping the /api prefix (so /api/products -> /products).
+        "^/api/(.*)?$": {
+          target: PRODUCTS_API_URL,
+          rewrite: (p) => p.replace(/^\/api/, ""),
         },
       },
     },
