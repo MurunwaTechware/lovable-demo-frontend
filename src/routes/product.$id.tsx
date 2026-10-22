@@ -7,7 +7,7 @@ import {
 import twinImg from "@/assets/twin.jpg";
 import { Nav } from "@/components/Nav";
 import { shopStore, useShop, type Product } from "@/lib/shop-store";
-import { productsApi, type ApiProduct, type ApiProductDetail } from "@/lib/products-api";
+import { productsApi, rand, type ApiProduct, type ApiProductDetail } from "@/lib/products-api";
 
 // Adapt an API product (detail or card) to the `Product` shape the cart/wishlist
 // store expects. Fields the catalogue can't supply yet get safe defaults.
@@ -94,8 +94,14 @@ function ProductPage() {
   }, [product.id, product.category, apiProduct.gender]);
 
   const hasFit = typeof apiProduct.fit === "number" && apiProduct.fit > 0;
-  const gallery = (apiProduct.images && apiProduct.images.length ? apiProduct.images : [product.img]).filter(Boolean);
-  const priceLabel = product.price ? `R${product.price}` : "";
+  const gallery: string[] = Array.from(
+    new Set((apiProduct.images && apiProduct.images.length ? apiProduct.images : [product.img]).filter(Boolean)),
+  );
+  // Which gallery image is shown large. Back to the first one when the product changes.
+  const [activeIdx, setActiveIdx] = useState(0);
+  useEffect(() => { setActiveIdx(0); }, [product.id]);
+  const mainImg = gallery[activeIdx] ?? product.img;
+  const priceLabel = rand(product.price);
 
   const onAdd = () => {
     shopStore.addToCart(product);
@@ -108,16 +114,16 @@ function ProductPage() {
       <Nav />
 
       <main className="mx-auto max-w-7xl px-6 pt-24 pb-24">
-        <Link to="/" hash="shop" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-3 w-3" /> Marketplace
+        <Link to="/shop" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-3 w-3" /> Shop
         </Link>
 
         <div className="mt-6 grid lg:grid-cols-[1.05fr_1fr] gap-12 items-start">
           {/* Gallery + virtual twin preview */}
           <div className="space-y-4">
             <div className="relative rounded-[2rem] overflow-hidden shadow-[var(--shadow-lux)] aspect-[4/5] bg-secondary">
-              {product.img ? (
-                <img src={product.img} alt={product.name} className="h-full w-full object-cover" />
+              {mainImg ? (
+                <img key={mainImg} src={mainImg} alt={product.name} className="h-full w-full object-cover animate-fade-up" />
               ) : (
                 <div className="h-full w-full bg-secondary" />
               )}
@@ -134,14 +140,29 @@ function ProductPage() {
                 <Heart className={`h-4 w-4 transition ${inWish ? "fill-[color:var(--plum)] text-[color:var(--plum)]" : "text-foreground"}`} />
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-4 gap-3">
+              {/* Try-on preview tile (placeholder until the try-on backend is wired) */}
               <div className="relative rounded-2xl overflow-hidden aspect-square" style={{ background: "var(--gradient-plum)" }}>
                 <img src={twinImg} alt="On your twin" className="h-full w-full object-cover mix-blend-screen opacity-80" />
                 {product.img && <img src={product.img} alt="" className="absolute inset-0 h-full w-full object-contain p-3 mix-blend-multiply opacity-90" />}
                 <div className="absolute bottom-1 left-1 right-1 glass rounded-full px-2 py-0.5 text-[10px] bg-white/80 text-center">On your twin</div>
               </div>
-              {(gallery[1] || gallery[0]) && <img src={gallery[1] ?? gallery[0]} alt="" className="rounded-2xl object-cover aspect-square" />}
-              {(gallery[2] || gallery[0]) && <img src={gallery[2] ?? gallery[0]} alt="" className="rounded-2xl object-cover aspect-square opacity-80" />}
+              {/* Clickable thumbnails: clicking one swaps the large image above */}
+              {gallery.slice(0, 7).map((src, i) => (
+                <button
+                  key={src}
+                  onClick={() => setActiveIdx(i)}
+                  aria-label={`Show image ${i + 1}`}
+                  aria-pressed={i === activeIdx}
+                  className={`relative rounded-2xl overflow-hidden aspect-square bg-secondary transition ${
+                    i === activeIdx
+                      ? "ring-2 ring-[color:var(--plum)] ring-offset-2 ring-offset-background"
+                      : "opacity-75 hover:opacity-100"
+                  }`}
+                >
+                  <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
+                </button>
+              ))}
             </div>
           </div>
 
@@ -155,6 +176,41 @@ function ProductPage() {
             </div>
 
             {product.description && <p className="mt-6 text-muted-foreground leading-relaxed">{product.description}</p>}
+
+            {/* Colour options — sibling colour variants from Superbalist */}
+            {apiProduct.colourOptions && apiProduct.colourOptions.length > 0 && (
+              <div className="mt-8">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
+                  Colour{apiProduct.colour ? <span className="text-foreground font-medium normal-case tracking-normal">· {apiProduct.colour}</span> : null}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-3">
+                  {/* current product first, as a selected swatch */}
+                  <span
+                    className="relative h-16 w-16 rounded-2xl overflow-hidden border-2 border-[color:var(--plum)] shrink-0"
+                    title={apiProduct.colour ?? "Current"}
+                  >
+                    {product.img && <img src={product.img} alt={apiProduct.colour ?? ""} className="h-full w-full object-cover" />}
+                  </span>
+                  {apiProduct.colourOptions
+                    .filter((c: ApiProductDetail["colourOptions"][number]) => String(c.id) !== product.id)
+                    .map((c: ApiProductDetail["colourOptions"][number]) => (
+                      <Link
+                        key={c.id}
+                        to="/product/$id"
+                        params={{ id: String(c.id) }}
+                        className="relative h-16 w-16 rounded-2xl overflow-hidden border border-border hover:border-[color:var(--plum)] transition shrink-0"
+                        title={c.colour ?? "Other colour"}
+                      >
+                        {c.image ? (
+                          <img src={c.image} alt={c.colour ?? ""} className="h-full w-full object-cover" />
+                        ) : (
+                          <span className="grid h-full w-full place-items-center text-[10px] text-muted-foreground capitalize">{c.colour}</span>
+                        )}
+                      </Link>
+                    ))}
+                </div>
+              </div>
+            )}
 
             {/* Sizes */}
             {product.sizes.length > 0 && (
@@ -273,7 +329,7 @@ function ProductPage() {
                 </div>
                 <h2 className="mt-2 font-display text-3xl md:text-4xl">Styled by your AI</h2>
               </div>
-              <Link to="/" hash="shop" className="text-sm text-muted-foreground hover:text-foreground">View all →</Link>
+              <Link to="/shop" className="text-sm text-muted-foreground hover:text-foreground">View all →</Link>
             </div>
 
             <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -290,7 +346,7 @@ function ProductPage() {
                   <div className="p-4">
                     <div className="text-xs text-muted-foreground">{p.brand} · {p.retailer}</div>
                     <div className="mt-1 font-display text-lg">{p.name}</div>
-                    {p.price ? <div className="mt-1 text-sm">R{p.price}</div> : null}
+                    {p.price ? <div className="mt-1 text-sm">{rand(p.price)}</div> : null}
                   </div>
                 </Link>
               ))}

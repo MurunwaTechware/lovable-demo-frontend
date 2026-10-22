@@ -5,7 +5,7 @@ import { useShop } from "@/lib/shop-store";
 import { fullName, initials, useAccount, type Account } from "@/lib/account-store";
 
 const LINKS = [
-  { to: "/stores", label: "Stores" },
+  { to: "/stores", label: "Brands" },
   { to: "/community", label: "Community" },
 ] as const;
 

@@ -17,6 +17,7 @@ import { Route as MeasurementsRouteImport } from './routes/measurements'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ScanRouteImport } from './routes/scan'
+import { Route as ShopRouteImport } from './routes/shop'
 import { Route as StylistRouteImport } from './routes/stylist'
 import { Route as TailorsRouteImport } from './routes/tailors'
 import { Route as TrustRouteImport } from './routes/trust'
@@ -76,6 +77,11 @@ const PrivacyRoute = PrivacyRouteImport.update({
 const ScanRoute = ScanRouteImport.update({
   id: '/scan',
   path: '/scan',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShopRoute = ShopRouteImport.update({
+  id: '/shop',
+  path: '/shop',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StylistRoute = StylistRouteImport.update({
@@ -188,6 +194,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/scan': typeof ScanRoute
+  '/shop': typeof ShopRoute
   '/stylist': typeof StylistRoute
   '/tailors': typeof TailorsRoute
   '/trust': typeof TrustRoute
@@ -216,6 +223,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/scan': typeof ScanRoute
+  '/shop': typeof ShopRoute
   '/stylist': typeof StylistRoute
   '/tailors': typeof TailorsRoute
   '/trust': typeof TrustRoute
@@ -247,6 +255,7 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
   '/scan': typeof ScanRoute
+  '/shop': typeof ShopRoute
   '/stylist': typeof StylistRoute
   '/tailors': typeof TailorsRoute
   '/trust': typeof TrustRoute
@@ -279,6 +288,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/privacy'
     | '/scan'
+    | '/shop'
     | '/stylist'
     | '/tailors'
     | '/trust'
@@ -307,6 +317,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/privacy'
     | '/scan'
+    | '/shop'
     | '/stylist'
     | '/tailors'
     | '/trust'
@@ -337,6 +348,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/privacy'
     | '/scan'
+    | '/shop'
     | '/stylist'
     | '/tailors'
     | '/trust'
@@ -368,6 +380,7 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   PrivacyRoute: typeof PrivacyRoute
   ScanRoute: typeof ScanRoute
+  ShopRoute: typeof ShopRoute
   StylistRoute: typeof StylistRoute
   TailorsRoute: typeof TailorsRoute
   TrustRoute: typeof TrustRoute
@@ -435,6 +448,13 @@ declare module '@tanstack/react-router' {
       path: '/scan'
       fullPath: '/scan'
       preLoaderRoute: typeof ScanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/shop': {
+      id: '/shop'
+      path: '/shop'
+      fullPath: '/shop'
+      preLoaderRoute: typeof ShopRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/stylist': {
@@ -630,6 +650,7 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   PrivacyRoute: PrivacyRoute,
   ScanRoute: ScanRoute,
+  ShopRoute: ShopRoute,
   StylistRoute: StylistRoute,
   TailorsRoute: TailorsRoute,
   TrustRoute: TrustRoute,
