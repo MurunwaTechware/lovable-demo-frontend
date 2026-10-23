@@ -325,7 +325,7 @@ function Home() {
               <article key={p.id} className="group rounded-3xl overflow-hidden bg-card border border-border shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-lux)] transition">
                 <Link to="/product/$id" params={{ id: p.id }} className="relative block aspect-[4/5] overflow-hidden bg-secondary">
                   <img src={p.img} alt={p.name} loading="lazy"
-                    className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
+                    className="h-full w-full object-cover object-top transition duration-700 group-hover:scale-105" />
                   <button onClick={(e) => { e.preventDefault(); toggleWish(p.id); }}
                     aria-label="Save to wishlist"
                     className="absolute top-3 right-3 h-9 w-9 grid place-items-center rounded-full glass bg-white/70">
@@ -460,7 +460,7 @@ function Home() {
                 return (
                   <div key={i} className="rounded-2xl border border-border p-3">
                     <div className="flex gap-3">
-                      <img src={p.img} alt="" className="h-20 w-16 rounded-xl object-cover" />
+                      <img src={p.img} alt="" className="h-20 w-16 rounded-xl object-cover object-top" />
                       <div className="flex-1">
                         <div className="text-xs text-muted-foreground">{p.retailer}</div>
                         <div className="text-sm font-medium">{p.name}</div>

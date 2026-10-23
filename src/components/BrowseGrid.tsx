@@ -258,7 +258,7 @@ export function ProductCard({ p, inWish }: { p: ApiProduct; inWish: boolean }) {
     <article className="group rounded-3xl overflow-hidden bg-card border border-border shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-lux)] transition">
       <Link to="/product/$id" params={{ id: p.id }} className="relative block aspect-[4/5] overflow-hidden bg-secondary">
         {p.img ? (
-          <img src={p.img} alt={p.name} loading="lazy" className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
+          <img src={p.img} alt={p.name} loading="lazy" className="h-full w-full object-cover object-top transition duration-700 group-hover:scale-105" />
         ) : <div className="h-full w-full bg-secondary" />}
         {p.onSale && (
           <div className="absolute top-3 left-3 rounded-full bg-[color:var(--plum)] text-white px-2.5 py-1 text-[10px] font-semibold">Sale</div>

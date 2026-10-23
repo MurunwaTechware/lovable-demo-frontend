@@ -123,7 +123,7 @@ function ProductPage() {
           <div className="space-y-4">
             <div className="relative rounded-[2rem] overflow-hidden shadow-[var(--shadow-lux)] aspect-[4/5] bg-secondary">
               {mainImg ? (
-                <img key={mainImg} src={mainImg} alt={product.name} className="h-full w-full object-cover animate-fade-up" />
+                <img key={mainImg} src={mainImg} alt={product.name} className="h-full w-full object-cover object-top animate-fade-up" />
               ) : (
                 <div className="h-full w-full bg-secondary" />
               )}
@@ -160,7 +160,7 @@ function ProductPage() {
                       : "opacity-75 hover:opacity-100"
                   }`}
                 >
-                  <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
+                  <img src={src} alt="" loading="lazy" className="h-full w-full object-cover object-top" />
                 </button>
               ))}
             </div>
@@ -341,7 +341,7 @@ function ProductPage() {
                   className="group rounded-3xl overflow-hidden bg-card border border-border shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-lux)] transition"
                 >
                   <div className="relative aspect-[4/5] overflow-hidden bg-secondary">
-                    {p.img && <img src={p.img} alt={p.name} className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />}
+                    {p.img && <img src={p.img} alt={p.name} className="h-full w-full object-cover object-top transition duration-700 group-hover:scale-105" />}
                   </div>
                   <div className="p-4">
                     <div className="text-xs text-muted-foreground">{p.brand} · {p.retailer}</div>

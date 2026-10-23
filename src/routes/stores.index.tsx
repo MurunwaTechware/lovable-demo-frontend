@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Shirt, ArrowRight, Search } from "lucide-react";
 import { Nav } from "@/components/Nav";
+import { BrandLogo } from "@/components/BrandLogo";
 import { productsApi, brandSlug, type BrandCard } from "@/lib/products-api";
 
 // Superbalist is one retailer carrying hundreds of brands, so this page lists
@@ -105,22 +106,16 @@ function BrandsPage() {
                     key={b.name}
                     to="/stores/$name"
                     params={{ name: brandSlug(b.name) }}
-                    className="group relative block aspect-[4/3] rounded-3xl overflow-hidden border border-border bg-secondary shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-lux)] transition"
+                    className="group rounded-2xl overflow-hidden border border-border bg-card shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-lux)] transition"
                   >
-                    {b.img ? (
-                      <img src={b.img} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover object-top transition duration-700 group-hover:scale-105" />
-                    ) : (
-                      <div className="absolute inset-0" style={{ background: "var(--gradient-plum)" }} />
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-                    <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5 text-white">
-                      <div className="font-display text-xl sm:text-2xl leading-tight">{b.name}</div>
-                      <div className="mt-1 flex items-center justify-between text-xs text-white/80">
-                        <span>{b.count} piece{b.count === 1 ? "" : "s"}</span>
-                        <span className="inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-                          Shop <ArrowRight className="h-3 w-3" />
-                        </span>
+                    {/* Bash-style logo tile (logo → product photo → text) */}
+                    <BrandLogo name={b.name} photo={b.img} className="aspect-[4/3] w-full" />
+                    <div className="flex items-center justify-between gap-2 px-4 py-3">
+                      <div className="min-w-0">
+                        <div className="font-display text-base sm:text-lg leading-tight truncate">{b.name}</div>
+                        <div className="text-xs text-muted-foreground">{b.count} piece{b.count === 1 ? "" : "s"}</div>
                       </div>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition shrink-0" />
                     </div>
                   </Link>
                 ))}
