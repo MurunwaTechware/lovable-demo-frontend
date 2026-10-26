@@ -52,6 +52,10 @@ export type ProductPage = {
 
 export type BrandCard = { name: string; count: number; img: string | null };
 
+/** A product's n-th photo (0 = first), served by the products API so the browser can read it as a file */
+export const productImageUrl = (id: string, n: number) =>
+  `${import.meta.env.VITE_PRODUCTS_API ?? "/api"}/products/${encodeURIComponent(id)}/image/${n}`;
+
 const BASE: string = import.meta.env.SSR
   ? (import.meta.env.VITE_PRODUCTS_API_SERVER_URL ?? "http://localhost:8001")
   : (import.meta.env.VITE_PRODUCTS_API ?? "/api");

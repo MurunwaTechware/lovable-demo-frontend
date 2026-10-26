@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import twinImg from "@/assets/twin.jpg";
 import { Nav } from "@/components/Nav";
+import { ProductTryOn } from "@/components/ProductTryOn";
 import { shopStore, useShop, type Product } from "@/lib/shop-store";
 import { productsApi, rand, type ApiProduct, type ApiProductDetail } from "@/lib/products-api";
 
@@ -253,6 +254,9 @@ function ProductPage() {
                 <Heart className={`h-5 w-5 ${inWish ? "fill-[color:var(--plum)] text-[color:var(--plum)]" : ""}`} />
               </button>
             </div>
+
+            {/* Try it on: not shown for kids' products */}
+            <ProductTryOn product={apiProduct} />
 
             {addedToast && (
               <div className="mt-3 inline-flex items-center gap-2 text-xs text-emerald-700 bg-emerald-500/10 px-3 py-1.5 rounded-full">
