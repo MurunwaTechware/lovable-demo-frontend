@@ -6,6 +6,8 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
+import { BACKEND_PATHS, PRODUCTS_API_PATHS, PRODUCTS_API_PREFIX } from "./src/lib/api-routes";
+
 // The FastAPI try-on backend (gemini-ai-virtual-try-on). Override with BACKEND_URL if it runs elsewhere.
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8000";
 // The Superbalist products API (products_api.py). Override with PRODUCTS_API_URL if it runs elsewhere.
@@ -25,17 +27,17 @@ export default defineConfig({
       // That keeps the backend's same-origin check on uploads working with no CORS settings.
       // Only API paths are forwarded; the page routes (/scan, /tryon, ...) stay with the frontend.
       // Lovable's own preview drops this setting, and has no backend to reach anyway.
+      // Which paths go where: src/lib/api-routes.ts, shared with the production server (src/server.ts).
       proxy: {
-        // session/logout/auth: sign-in (lib/auth.ts). Through here, the session cookie belongs to this address.
-        "^/(process_upload|job_events|measurements_data|defaults|try-on|me|session|logout|auth)(/.*)?$":
-          {
-            target: BACKEND_URL,
-          },
+        // Includes session/logout/auth for sign-in (lib/auth.ts): the session cookie belongs to this address
+        [BACKEND_PATHS.source]: {
+          target: BACKEND_URL,
+        },
         // Superbalist products API. The browser calls /api/products, /api/brands, ... and this
         // forwards to the products service, stripping the /api prefix (so /api/products -> /products).
-        "^/api/(.*)?$": {
+        [PRODUCTS_API_PATHS.source]: {
           target: PRODUCTS_API_URL,
-          rewrite: (p) => p.replace(/^\/api/, ""),
+          rewrite: (p) => p.slice(PRODUCTS_API_PREFIX.length),
         },
       },
     },

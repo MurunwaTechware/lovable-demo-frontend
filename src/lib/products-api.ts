@@ -56,8 +56,10 @@ export type BrandCard = { name: string; count: number; img: string | null };
 export const productImageUrl = (id: string, n: number) =>
   `${import.meta.env.VITE_PRODUCTS_API ?? "/api"}/products/${encodeURIComponent(id)}/image/${n}`;
 
+// On the server, PRODUCTS_API_URL is read when it starts (set on the Cloud Run service), so one build works
+// anywhere; VITE_PRODUCTS_API_SERVER_URL is the older, build-time way to set it.
 const BASE: string = import.meta.env.SSR
-  ? (import.meta.env.VITE_PRODUCTS_API_SERVER_URL ?? "http://localhost:8001")
+  ? (process.env.PRODUCTS_API_URL ?? import.meta.env.VITE_PRODUCTS_API_SERVER_URL ?? "http://localhost:8001")
   : (import.meta.env.VITE_PRODUCTS_API ?? "/api");
 
 export class ProductsApiError extends Error {
