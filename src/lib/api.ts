@@ -4,6 +4,8 @@
 //
 // Shapes here are the backend's own (snake_case). twin-store.ts turns them into the app's types.
 
+import { accountStore } from "@/lib/account-store";
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -17,7 +19,7 @@ export class ApiError extends Error {
 function messageFrom(data: unknown, status: number) {
   const detail = (data as { detail?: unknown } | null)?.detail;
   if (typeof detail === "string") return detail;
-  if (status === 401) return "Your sign-in has expired. Reload the page to sign in again.";
+  if (status === 401) return "Please sign in to continue.";
   if (status === 502 || status === 503 || status === 504 || status === 0)
     return "Can't reach the measuring service right now. Is the backend running?";
   return `Something went wrong (${status}). Please try again.`;
@@ -31,6 +33,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(messageFrom(null, 0), 0);
   }
   const data = await res.json().catch(() => null);
+  if (res.status === 401) accountStore.sessionEnded(); // not signed in, or the session ran out
   if (!res.ok) throw new ApiError(messageFrom(data, res.status), res.status);
   return data as T;
 }

@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { authErrorMessage, sendPasswordReset } from "@/lib/auth";
 import {
   accountStore,
   checkDateOfBirth,
@@ -56,6 +57,8 @@ function PersonalInfo({ account }: { account: Account }) {
   const [draft, setDraft] = useState<Draft>(() => toDraft(account));
   const [errors, setErrors] = useState<Errors>({});
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!saved) return;
@@ -67,6 +70,7 @@ function PersonalInfo({ account }: { account: Account }) {
     setDraft(toDraft(account));
     setErrors({});
     setSaved(false);
+    setSaveError(null);
     setEditing(true);
   };
 
@@ -75,7 +79,7 @@ function PersonalInfo({ account }: { account: Account }) {
     setErrors((er) => ({ ...er, [field]: null }));
   };
 
-  const save = (e: React.FormEvent) => {
+  const save = async (e: React.FormEvent) => {
     e.preventDefault();
     const found: Errors = {
       firstName: checkName(draft.firstName, "name"),
@@ -86,16 +90,27 @@ function PersonalInfo({ account }: { account: Account }) {
     setErrors(found);
     if (Object.values(found).some(Boolean)) return;
 
-    // Demo for PATCH /me. Spaces are tidied the same way the backend does it.
+    // PATCH /me. Spaces are tidied the same way the backend does it.
+    // Date of birth isn't in the backend yet, so it's only kept in this tab (lib/account-store.ts).
     const tidy = (s: string) => s.trim().replace(/\s+/g, " ");
-    accountStore.update({
-      firstName: tidy(draft.firstName),
-      lastName: tidy(draft.lastName),
-      phone: tidy(draft.phone) || null,
-      dateOfBirth: draft.dateOfBirth || null,
-    });
-    setEditing(false);
-    setSaved(true);
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await accountStore.update({
+        firstName: tidy(draft.firstName),
+        lastName: tidy(draft.lastName),
+        phone: tidy(draft.phone) || null,
+        dateOfBirth: draft.dateOfBirth || null,
+      });
+      setEditing(false);
+      setSaved(true);
+    } catch (err) {
+      setSaveError(
+        err instanceof Error ? err.message : "Couldn't save your details. Please try again.",
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const rows: [string, string | null][] = [
@@ -129,7 +144,7 @@ function PersonalInfo({ account }: { account: Account }) {
       }
     >
       {editing ? (
-        <form onSubmit={save} noValidate>
+        <form onSubmit={(e) => void save(e)} noValidate>
           <div className="grid sm:grid-cols-2 gap-5">
             <Field label="Name" error={errors.firstName}>
               <input
@@ -183,8 +198,8 @@ function PersonalInfo({ account }: { account: Account }) {
             </Field>
           </div>
           <div className="mt-6 flex flex-wrap gap-3">
-            <button type="submit" className={buttonClass.primary}>
-              Save changes
+            <button type="submit" disabled={saving} className={buttonClass.primary}>
+              {saving ? "Saving…" : "Save changes"}
             </button>
             <button
               type="button"
@@ -194,6 +209,11 @@ function PersonalInfo({ account }: { account: Account }) {
               Cancel
             </button>
           </div>
+          {saveError && (
+            <p className="mt-3 text-sm text-[color:var(--plum)]" role="alert">
+              {saveError}
+            </p>
+          )}
         </form>
       ) : (
         <dl className="grid sm:grid-cols-2 gap-x-8 gap-y-5">
@@ -215,11 +235,20 @@ function PersonalInfo({ account }: { account: Account }) {
 
 function SignInSecurity({ account }: { account: Account }) {
   const [resetSent, setResetSent] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
   const { google, password } = account.signInMethods;
 
-  // Demo. With Firebase: sendPasswordResetEmail(auth, email) from the browser. Firebase sends the email and
-  // hosts the page where they choose the new password, so the backend isn't involved.
-  const sendReset = () => setResetSent(true);
+  // Firebase sends the email and hosts the page where they choose the new password, so the backend
+  // isn't involved
+  const sendReset = async () => {
+    setResetError(null);
+    try {
+      await sendPasswordReset(account.email);
+      setResetSent(true);
+    } catch (err) {
+      setResetError(authErrorMessage(err) || "Couldn't send the link. Please try again.");
+    }
+  };
 
   return (
     <Panel
@@ -255,7 +284,7 @@ function SignInSecurity({ account }: { account: Account }) {
           {password && (
             <button
               type="button"
-              onClick={sendReset}
+              onClick={() => void sendReset()}
               disabled={resetSent}
               className={buttonClass.secondary}
             >
@@ -265,6 +294,11 @@ function SignInSecurity({ account }: { account: Account }) {
         </div>
       </div>
 
+      {resetError && (
+        <p className="mt-4 text-sm text-[color:var(--plum)]" role="alert">
+          {resetError}
+        </p>
+      )}
       {resetSent && (
         <p className="mt-4 rounded-2xl bg-secondary px-4 py-3 text-sm" role="status">
           We've emailed a link to <strong className="font-medium">{account.email}</strong>. Open it

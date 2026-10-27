@@ -26,9 +26,11 @@ export default defineConfig({
       // Only API paths are forwarded; the page routes (/scan, /tryon, ...) stay with the frontend.
       // Lovable's own preview drops this setting, and has no backend to reach anyway.
       proxy: {
-        "^/(process_upload|job_events|measurements_data|defaults|try-on|me)(/.*)?$": {
-          target: BACKEND_URL,
-        },
+        // session/logout/auth: sign-in (lib/auth.ts). Through here, the session cookie belongs to this address.
+        "^/(process_upload|job_events|measurements_data|defaults|try-on|me|session|logout|auth)(/.*)?$":
+          {
+            target: BACKEND_URL,
+          },
         // Superbalist products API. The browser calls /api/products, /api/brands, ... and this
         // forwards to the products service, stripping the /api prefix (so /api/products -> /products).
         "^/api/(.*)?$": {

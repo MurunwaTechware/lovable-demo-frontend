@@ -1,10 +1,11 @@
-// The signed-in user: the top bar's account button and the /account pages.
+// The signed-in user: the top bar's account button, the sign-in dialog and the /account pages.
 //
-// MOCK until sign-in is connected. The shapes follow the backend (camelCased here):
-//   GET /me                    → { uid, email, name, first_name, last_name, phone, photo_url }
+// Comes from the backend, which knows who's signed in from its HttpOnly session cookie (lib/auth.ts):
+//   GET /me                    → { uid, email, name, first_name, last_name, phone, photo_url }, or 401
 //   PATCH /me                  → change first_name, last_name, phone (only the fields sent)
 //   GET /me/sign-in-methods    → { google, password }
-// Not in the backend yet: date of birth (PATCH /me would need a date_of_birth field), deleting the account.
+// With sign-in turned off on the backend, /me answers with its demo user.
+// Not in the backend yet: date of birth (kept in this browser tab only), deleting the account.
 
 import { useSyncExternalStore } from "react";
 
@@ -25,37 +26,149 @@ export type DetailsUpdate = Partial<
   Pick<Account, "firstName" | "lastName" | "phone" | "dateOfBirth">
 >;
 
-// Sample person, not a real account
-let account: Account | null = {
-  uid: "demo-user",
-  email: "ava@example.com",
-  firstName: "Ava",
-  lastName: "Mokoena",
-  phone: "+27 82 555 0143",
-  dateOfBirth: "1999-03-14",
-  photoUrl: null,
-  signInMethods: { google: false, password: true },
+/** "loading" until the backend has answered; pages rendered on the server stay "loading". */
+export type AccountStatus = "loading" | "signed-in" | "signed-out";
+
+type BackendMe = {
+  uid: string;
+  email: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
+  photo_url: string | null;
 };
+
+let status: AccountStatus = "loading";
+let account: Account | null = null;
+let loading: Promise<void> | null = null;
+let signInRequests = 0; // bumped when a page needs the user to sign in; the sign-in dialog opens on it
 
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
+const fromBackend = (
+  me: BackendMe,
+  methods: SignInMethods,
+  dateOfBirth: string | null,
+): Account => ({
+  uid: me.uid,
+  email: me.email ?? "",
+  firstName: me.first_name ?? "",
+  lastName: me.last_name ?? "",
+  phone: me.phone,
+  dateOfBirth,
+  photoUrl: me.photo_url,
+  signInMethods: methods,
+});
+
+async function load() {
+  try {
+    const res = await fetch("/me", { credentials: "same-origin" });
+    if (!res.ok) {
+      // 401: not signed in. Anything else (backend down): treated the same, so the page still works
+      account = null;
+      status = "signed-out";
+      return;
+    }
+    const me = (await res.json()) as BackendMe;
+    const methodsRes = await fetch("/me/sign-in-methods", { credentials: "same-origin" });
+    const methods: SignInMethods = methodsRes.ok
+      ? await methodsRes.json()
+      : { google: false, password: false };
+    account = fromBackend(me, methods, account?.uid === me.uid ? account.dateOfBirth : null);
+    status = "signed-in";
+  } catch {
+    account = null;
+    status = "signed-out";
+  } finally {
+    emit();
+  }
+}
+
+function errorFrom(data: unknown, status: number) {
+  const detail = (data as { detail?: unknown } | null)?.detail;
+  return typeof detail === "string" ? detail : `Couldn't save your details (${status}).`;
+}
+
 export const accountStore = {
   get: () => account,
+  getStatus: () => status,
+  getSignInRequests: () => signInRequests,
   subscribe(listener: () => void) {
     listeners.add(listener);
+    // The first page to show the account asks the backend who's signed in (browser only)
+    if (typeof window !== "undefined" && status === "loading" && !loading) {
+      loading = load();
+    }
     return () => listeners.delete(listener);
   },
-  /** Demo for PATCH /me. Changes stay until the page reloads. */
-  update(changes: DetailsUpdate) {
+  /** Ask the backend again, e.g. right after signing in. */
+  refresh() {
+    loading = load();
+    return loading;
+  },
+  /** Signed out: forget the account straight away. */
+  clear() {
+    account = null;
+    status = "signed-out";
+    emit();
+  },
+  /** Open the sign-in dialog, e.g. from a "Sign in" button. */
+  requestSignIn() {
+    signInRequests += 1;
+    emit();
+  },
+  /** A request answered 401: not signed in, or the session ran out. Forget the account and ask to sign in. */
+  sessionEnded() {
+    account = null;
+    status = "signed-out";
+    signInRequests += 1;
+    emit();
+  },
+  /** PATCH /me for name, surname and phone. Date of birth isn't in the backend yet, so it stays here. */
+  async update(changes: DetailsUpdate) {
     if (!account) return;
-    account = { ...account, ...changes };
+    const body: Record<string, string | null> = {};
+    if ("firstName" in changes) body.first_name = changes.firstName ?? null;
+    if ("lastName" in changes) body.last_name = changes.lastName ?? null;
+    if ("phone" in changes) body.phone = changes.phone ?? null;
+    let me: BackendMe | null = null;
+    if (Object.keys(body).length) {
+      const res = await fetch("/me", {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.status === 401) accountStore.sessionEnded();
+      if (!res.ok) throw new Error(errorFrom(data, res.status));
+      me = data as BackendMe;
+    }
+    const dateOfBirth =
+      "dateOfBirth" in changes ? (changes.dateOfBirth ?? null) : account.dateOfBirth;
+    account = me
+      ? fromBackend(me, account.signInMethods, dateOfBirth)
+      : { ...account, dateOfBirth };
     emit();
   },
 };
 
 export function useAccount() {
-  return useSyncExternalStore(accountStore.subscribe, accountStore.get, accountStore.get);
+  return useSyncExternalStore(accountStore.subscribe, accountStore.get, () => null);
+}
+
+export function useAccountStatus() {
+  return useSyncExternalStore(
+    accountStore.subscribe,
+    accountStore.getStatus,
+    () => "loading" as const,
+  );
+}
+
+/** Changes each time something asks for the sign-in dialog. */
+export function useSignInRequests() {
+  return useSyncExternalStore(accountStore.subscribe, accountStore.getSignInRequests, () => 0);
 }
 
 export function fullName(a: Pick<Account, "firstName" | "lastName">) {

@@ -145,8 +145,20 @@ export function Nav({ onOpenCart }: { onOpenCart?: () => void }) {
 
 // Like a Google account without a profile picture: initials on a coloured circle. Shows the photo once there is one.
 export function Avatar({ account, size }: { account: Account | null; size: string }) {
-  if (account?.photoUrl) {
-    return <img src={account.photoUrl} alt="" className={`${size} rounded-full object-cover`} />;
+  // The picture that failed to load, so a broken one falls back to initials (and a new one is tried again)
+  const [failed, setFailed] = useState<string | null>(null);
+  if (account?.photoUrl && failed !== account.photoUrl) {
+    return (
+      <img
+        src={account.photoUrl}
+        alt=""
+        // Google's profile pictures (lh3.googleusercontent.com) often refuse requests that say which site
+        // they come from, so send none
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(account.photoUrl)}
+        className={`${size} rounded-full object-cover`}
+      />
+    );
   }
   return (
     <span

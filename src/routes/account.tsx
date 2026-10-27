@@ -1,10 +1,13 @@
 import { createFileRoute, Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   Bell,
   ChevronLeft,
   ChevronRight,
   Heart,
   LifeBuoy,
+  Loader2,
   LogOut,
   Package,
   RotateCcw,
@@ -13,7 +16,8 @@ import {
 } from "lucide-react";
 
 import { Avatar, Nav } from "@/components/Nav";
-import { useAccount } from "@/lib/account-store";
+import { accountStore, useAccount, useAccountStatus } from "@/lib/account-store";
+import { endSession } from "@/lib/auth";
 
 // The account area: "Hi {name}" at the top, the menu on the left (on phones, a list on the main account page)
 // and the chosen section on the right. Wishlist and Help centre are their own pages outside this area.
@@ -54,22 +58,52 @@ const MENU: MenuItem[] = [
 
 function AccountLayout() {
   const account = useAccount();
+  const status = useAccountStatus();
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [signOutError, setSignOutError] = useState<string | null>(null);
   const onDetails = pathname.replace(/\/$/, "") === "/account";
 
-  // Demo: nothing to clear yet. With the backend: POST /logout (ends the session cookie), then Firebase signOut().
-  const signOut = () => navigate({ to: "/" });
+  // Ends the backend's session cookie (this browser only), then forgets everything loaded for this user
+  const signOut = async () => {
+    setSignOutError(null);
+    try {
+      await endSession();
+    } catch (err) {
+      setSignOutError(err instanceof Error ? err.message : "Couldn't sign out. Please try again.");
+      return;
+    }
+    accountStore.clear();
+    queryClient.clear();
+    navigate({ to: "/" });
+  };
 
   if (!account) {
     return (
       <div className="min-h-screen bg-background text-foreground">
         <Nav />
         <main className="mx-auto max-w-md px-6 pt-32 text-center">
-          <h1 className="font-display text-3xl">Sign in to see your account</h1>
-          <p className="mt-2 text-muted-foreground">
-            Your orders, wallet and details live here once you're signed in.
-          </p>
+          {status === "loading" ? (
+            <Loader2
+              className="mx-auto h-6 w-6 animate-spin text-muted-foreground"
+              aria-label="Loading"
+            />
+          ) : (
+            <>
+              <h1 className="font-display text-3xl">Sign in to see your account</h1>
+              <p className="mt-2 text-muted-foreground">
+                Your orders, wallet and details live here once you're signed in.
+              </p>
+              <button
+                type="button"
+                onClick={() => accountStore.requestSignIn()}
+                className="mt-6 rounded-full bg-primary text-primary-foreground px-6 py-3 text-sm font-medium"
+              >
+                Sign in
+              </button>
+            </>
+          )}
         </main>
       </div>
     );
@@ -121,11 +155,16 @@ function AccountLayout() {
               <div className="my-2 border-t border-border" />
               <button
                 type="button"
-                onClick={signOut}
+                onClick={() => void signOut()}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition"
               >
                 <LogOut className="h-4 w-4" /> Sign out
               </button>
+              {signOutError && (
+                <p className="px-3 pt-1 text-xs text-[color:var(--plum)]" role="alert">
+                  {signOutError}
+                </p>
+              )}
             </nav>
           </aside>
 
