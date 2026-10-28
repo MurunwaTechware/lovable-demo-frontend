@@ -7,8 +7,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { saveTryOn } from "@/lib/api";
 import { QUERY_KEYS, TRY_ON_PHOTO_LABELS, type TryOnPhotoKind } from "@/lib/twin-store";
 
-// Pieces shared by the try-on page (routes/tryon.tsx) and the product try-on dialog
-// (components/ProductTryOn.tsx): photo pickers, the before/after result, and the upload limits.
+// Pieces of the product try-on dialog (components/ProductTryOn.tsx): the photo pickers, the
+// before/after result, and the upload limits.
 
 export const MAX_IMAGE_BYTES = 7 * 1024 * 1024; // per image, the backend's limit
 export const MAX_TOTAL_BYTES = 14 * 1024 * 1024; // all uploads together

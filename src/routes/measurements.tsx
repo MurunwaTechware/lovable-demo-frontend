@@ -95,22 +95,13 @@ function MeasurementsPage() {
             >
               <Upload className="h-4 w-4" /> Upload again
             </Link>
-            {profile?.status === "ready" ? (
-              <Link
-                to="/tryon"
-                search={{ job: profile.jobId }}
-                className="rounded-full bg-primary text-primary-foreground py-3.5 text-sm font-medium inline-flex items-center justify-center gap-2"
-              >
-                Continue to try-on <ArrowRight className="h-4 w-4" />
-              </Link>
-            ) : (
-              <Link
-                to="/twin"
-                className="rounded-full bg-primary text-primary-foreground py-3.5 text-sm font-medium inline-flex items-center justify-center gap-2"
-              >
-                Go to your twin <ArrowRight className="h-4 w-4" />
-              </Link>
-            )}
+            {/* The twin page shows the new profile and leads on to trying clothes on */}
+            <Link
+              to="/twin"
+              className="rounded-full bg-primary text-primary-foreground py-3.5 text-sm font-medium inline-flex items-center justify-center gap-2"
+            >
+              Go to your twin <ArrowRight className="h-4 w-4" />
+            </Link>
           </div>
         </div>
       </main>
