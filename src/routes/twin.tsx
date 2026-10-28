@@ -260,8 +260,7 @@ function LatestCard({
               <Ruler className="h-4 w-4" /> Full results
             </Link>
             <Link
-              to="/tryon"
-              search={{ job: profile.jobId }}
+              to="/stores"
               className="rounded-full bg-primary text-primary-foreground px-5 py-2.5 text-sm font-medium inline-flex items-center gap-2"
             >
               Try clothes on <ArrowRight className="h-4 w-4" />
@@ -866,8 +865,7 @@ function ProfileCard({ profile }: { profile: MeasurementProfile }) {
                 <Ruler className="h-3.5 w-3.5" /> Measurements
               </Link>
               <Link
-                to="/tryon"
-                search={{ job: profile.jobId }}
+                to="/stores"
                 className="rounded-full border border-border px-4 py-2 text-xs font-medium inline-flex items-center gap-1.5 hover:bg-accent"
               >
                 <Shirt className="h-3.5 w-3.5" /> Try on
