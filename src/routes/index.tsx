@@ -14,18 +14,31 @@ import p2 from "@/assets/p2.jpg";
 import p3 from "@/assets/p3.jpg";
 import scanVideo from "@/assets/scan.mp4.asset.json";
 import { Nav } from "@/components/Nav";
-import { PRODUCTS, shopStore, useShop, type Product } from "@/lib/shop-store";
+import { shopStore, useShop, type Product } from "@/lib/shop-store";
+import { useQuery } from "@tanstack/react-query";
+import { productsApi, brandSlug, rand, type ApiProduct } from "@/lib/products-api";
+
+function toProduct(p: ApiProduct): Product {
+  return {
+    id: p.id, name: p.name ?? "", brand: p.brand ?? "Superbalist",
+    price: p.price ?? 0, img: p.img ?? "", retailer: p.retailer ?? "Superbalist",
+    category: p.category ?? "", fit: p.fit ?? 0, description: "",
+    sizes: [], materials: "", care: "", tailorTips: [],
+  };
+}
 
 export const Route = createFileRoute("/")({ component: Home });
 
-const RETAILERS = ["All", "Farfetch", "Nike", "Net-a-Porter", "Mr Porter", "Zara"];
-const RETAILER_MARQUEE = ["FARFETCH", "NET-A-PORTER", "NIKE", "MR PORTER", "ZARA", "SSENSE", "MYTHERESA", "END.", "MATCHES", "BROWNS"];
+// Shown in the hero strip only until the real brand list has loaded.
+const FALLBACK_MARQUEE = ["SUPERBALIST", "H&M", "ADIDAS", "MANGO", "UNDER ARMOUR", "VANS", "FACTORIE", "CONVERSE"];
+const TEASER_BRANDS = 6;   // brand chips on the homepage teaser
+const TEASER_ITEMS = 4;    // products on the homepage teaser
 
 
 function Home() {
   const { wishlist, cart, tailoring } = useShop();
   const [cartOpen, setCartOpen] = useState(false);
-  const [retailer, setRetailer] = useState("All");
+  const [brand, setBrand] = useState<string | null>(null);
   const [tryOn, setTryOn] = useState<Product | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
   const [scanned, setScanned] = useState(() => {
@@ -44,10 +57,26 @@ function Home() {
 
 
 
-  const filtered = useMemo(
-    () => retailer === "All" ? PRODUCTS : PRODUCTS.filter((p) => p.retailer === retailer),
-    [retailer]
+  // Real brands (with product counts) — biggest first for the teaser chips.
+  const { data: brandData } = useQuery({
+    queryKey: ["brand-cards"],
+    queryFn: () => productsApi.brandCards(),
+  });
+  const allBrands = brandData?.brands ?? [];
+  const topBrands = useMemo(
+    () => [...allBrands].sort((a, b) => b.count - a.count).slice(0, TEASER_BRANDS),
+    [allBrands],
   );
+  const marquee = topBrands.length
+    ? [...allBrands].sort((a, b) => b.count - a.count).slice(0, 12).map((b) => b.name.toUpperCase())
+    : FALLBACK_MARQUEE;
+
+  // A small teaser grid; the full feed lives on /shop.
+  const { data: shopData } = useQuery({
+    queryKey: ["home-teaser", brand],
+    queryFn: () => productsApi.list({ brand: brand ?? undefined, page_size: TEASER_ITEMS }),
+  });
+  const filtered = useMemo(() => (shopData?.items ?? []).map(toProduct), [shopData]);
 
   const toggleWish = (id: string) => shopStore.toggleWish(id);
   const addToCart = (p: Product) => { shopStore.addToCart(p); setCartOpen(true); };
@@ -107,13 +136,13 @@ function Home() {
                 <ScanLine className="h-4 w-4" /> Start body scan
                 <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
               </button>
-              <a href="#shop" className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-6 py-3 text-sm font-medium hover:bg-accent">
+              <Link to="/shop" className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-6 py-3 text-sm font-medium hover:bg-accent">
                 Explore marketplace
-              </a>
+              </Link>
             </div>
             <div className="mt-10 flex items-center gap-6 text-sm text-muted-foreground">
               <div><div className="font-display text-2xl text-foreground">2.4M</div>twins scanned</div>
-              <div><div className="font-display text-2xl text-foreground">180+</div>retailers</div>
+              <div><div className="font-display text-2xl text-foreground">{allBrands.length ? `${allBrands.length}` : "—"}</div>brands</div>
               <div><div className="font-display text-2xl text-foreground">96%</div>avg fit accuracy</div>
             </div>
           </div>
@@ -154,7 +183,7 @@ function Home() {
         {/* retailer marquee */}
         <div className="border-y border-border bg-card/50 overflow-hidden py-5">
           <div className="marquee-track text-xs tracking-[0.3em] font-medium text-muted-foreground">
-            {[...RETAILER_MARQUEE, ...RETAILER_MARQUEE].map((r, i) => (
+            {[...marquee, ...marquee].map((r, i) => (
               <span key={i} className="whitespace-nowrap">{r}</span>
             ))}
           </div>
@@ -204,19 +233,7 @@ function Home() {
             {scanned ? (
               <MorphingTwin measurements={measurements} />
             ) : (
-              <>
-                <img src={twinImg} alt="Your Digital Body Twin" width={1200} height={1400} loading="lazy" className="h-full w-full object-cover mix-blend-screen opacity-90 blur-md" />
-                <div className="absolute inset-0 grid place-items-center bg-black/40 backdrop-blur-[2px] text-center p-6">
-                  <div>
-                    <div className="text-[11px] uppercase tracking-[0.3em] text-white/80">Locked</div>
-                    <div className="mt-2 font-display text-2xl text-white">Twin not scanned yet</div>
-                    <button onClick={() => setScanOpen(true)}
-                      className="mt-4 inline-flex items-center gap-2 rounded-full bg-white text-[color:var(--plum)] px-5 py-2.5 text-sm font-medium">
-                      <ScanLine className="h-4 w-4" /> Open camera to scan
-                    </button>
-                  </div>
-                </div>
-              </>
+              <img src={twinImg} alt="Your Digital Body Twin" width={1200} height={1400} loading="lazy" className="h-full w-full object-cover mix-blend-screen opacity-90 blur-md" />
             )}
           </div>
 
@@ -224,20 +241,17 @@ function Home() {
           <div>
             <SectionKicker>02 · Digital Twin & Fit Confidence</SectionKicker>
             <h2 className="mt-3 text-4xl md:text-5xl">Measurements you can <span className="italic">tune</span>.</h2>
-            <p className="mt-5 text-muted-foreground max-w-lg">
-              Fine-tune your twin with a tap. Every adjustment recalculates fit confidence across your wishlist in real time.
-            </p>
 
             {!scanned ? (
-              <div className="mt-8 rounded-2xl border border-dashed border-border bg-card/60 p-6">
-                <div className="text-sm text-muted-foreground">
+              <>
+                <p className="mt-5 text-muted-foreground max-w-lg">
                   Your measurements appear here once your body scan is complete. Press <span className="text-foreground font-medium">Start scan</span> to open the camera and capture your three poses.
-                </div>
+                </p>
                 <button onClick={() => setScanOpen(true)}
-                  className="mt-5 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-6 py-3 text-sm font-medium">
+                  className="mt-8 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-6 py-3 text-sm font-medium">
                   <ScanLine className="h-4 w-4" /> Start camera scan
                 </button>
-              </div>
+              </>
             ) : (
               <>
                 <div className="mt-8 grid sm:grid-cols-2 gap-4">
@@ -269,120 +283,69 @@ function Home() {
         </div>
       </section>
 
-
-      {/* AI STYLIST */}
-      <section id="stylist" className="mx-auto max-w-7xl px-6 py-24">
-        <div className="grid lg:grid-cols-[1.1fr_1fr] gap-12 items-start">
-          <div>
-            <SectionKicker>03 · AI Stylist</SectionKicker>
-            <h2 className="mt-3 text-4xl md:text-5xl">A stylist who <span className="italic">knows</span> your closet.</h2>
-            <p className="mt-5 text-muted-foreground max-w-lg">
-              Ask anything — weather-aware outfits, capsule wardrobes, gift ideas, tailor bookings. Your stylist replies with shoppable looks.
-            </p>
-
-            <div className="mt-6 grid sm:grid-cols-2 gap-3">
-              {[
-                ["Weather-aware", "Dresses you for the forecast — automatically."],
-                ["Capsule builder", "5-piece wardrobes for any brief."],
-                ["Tailor concierge", "Books alterations near you."],
-                ["Occasion mode", "Wedding, gala, hike — done in seconds."],
-              ].map(([t, d]) => (
-                <div key={t} className="rounded-2xl border border-border bg-card p-4">
-                  <div className="font-medium">{t}</div>
-                  <div className="mt-1 text-sm text-muted-foreground">{d}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-border bg-card shadow-[var(--shadow-lux)] overflow-hidden">
-            <div className="flex items-center gap-3 p-4 border-b border-border">
-              <div className="h-10 w-10 rounded-full grid place-items-center" style={{ background: "var(--gradient-plum)" }}>
-                <Bot className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <div className="font-medium text-sm">Mannequin Stylist</div>
-                <div className="text-xs text-muted-foreground flex items-center gap-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Online · replies instantly
-                </div>
-              </div>
-            </div>
-            <div className="p-4 h-80 overflow-y-auto space-y-3">
-              {chat.map((m, i) => (
-                <div key={i} className={`flex ${m.from === "me" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${m.from === "me" ? "bg-primary text-primary-foreground rounded-br-md" : "bg-secondary text-secondary-foreground rounded-bl-md"}`}>
-                    {m.text}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="p-3 border-t border-border">
-              <div className="flex gap-2 mb-3 overflow-x-auto no-scrollbar">
-                {suggestions.map((s) => (
-                  <button key={s} onClick={() => sendChat(s)} className="whitespace-nowrap rounded-full border border-border bg-background px-3 py-1.5 text-xs hover:bg-accent">
-                    {s}
-                  </button>
-                ))}
-              </div>
-              <form onSubmit={(e) => { e.preventDefault(); sendChat(chatInput); }} className="flex gap-2">
-                <input value={chatInput} onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Ask your stylist…"
-                  className="flex-1 rounded-full border border-border bg-background px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[color:var(--plum)]/40" />
-                <button className="h-10 w-10 grid place-items-center rounded-full bg-primary text-primary-foreground">
-                  <Send className="h-4 w-4" />
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* MARKETPLACE */}
+      {/* MARKETPLACE TEASER — the full feed is on /shop */}
       <section id="shop" className="bg-secondary/60 border-y border-border">
-        <div className="mx-auto max-w-7xl px-6 py-24">
+        <div className="mx-auto max-w-7xl px-6 py-20">
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
               <SectionKicker>04 · Retail Marketplace</SectionKicker>
               <h2 className="mt-3 text-4xl md:text-5xl">Shop <span className="italic">everywhere</span>, in one cart.</h2>
+              <p className="mt-3 max-w-lg text-muted-foreground">
+                {allBrands.length ? `${allBrands.length} brands` : "Every brand"}, one universal cart. Pick a brand for a taste, or open the full shop to search and filter everything.
+              </p>
             </div>
-            <img src={productsImg} alt="" width={1400} height={1000} loading="lazy" className="hidden md:block h-24 w-48 rounded-2xl object-cover shadow-[var(--shadow-card)]" />
+            <Link to="/shop"
+              className="inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-6 py-3 text-sm font-medium shadow-[var(--shadow-lux)] hover:opacity-90">
+              Browse all pieces <ArrowRight className="h-4 w-4" />
+            </Link>
           </div>
 
+          {/* real brand chips — filter the teaser below */}
           <div className="mt-8 flex flex-wrap gap-2">
-            {RETAILERS.map((r) => (
-              <button key={r} onClick={() => setRetailer(r)}
-                className={`rounded-full px-4 py-2 text-xs font-medium border transition ${retailer === r ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border hover:bg-accent"}`}>
-                {r}
-              </button>
-            ))}
+            {[null, ...topBrands.map((b) => b.name)].map((name) => {
+              const active = brand === name;
+              return (
+                <button key={name ?? "all"} onClick={() => setBrand(name)}
+                  className={`rounded-full px-4 py-2 text-xs font-medium border transition ${active ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border hover:bg-accent"}`}>
+                  {name ?? "All"}
+                </button>
+              );
+            })}
+            <Link to="/stores" className="rounded-full px-4 py-2 text-xs font-medium text-muted-foreground hover:text-foreground">
+              All brands →
+            </Link>
           </div>
 
-          <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filtered.map((p) => (
+          <div className="mt-8 grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            {filtered.length === 0
+              ? Array.from({ length: TEASER_ITEMS }).map((_, i) => (
+                  <div key={i} className="aspect-[4/5] rounded-3xl border border-border bg-card animate-pulse" />
+                ))
+              : filtered.map((p) => (
               <article key={p.id} className="group rounded-3xl overflow-hidden bg-card border border-border shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-lux)] transition">
-                <div className="relative aspect-[4/5] overflow-hidden bg-secondary">
-                  <img src={p.img} alt={p.name} width={900} height={1100} loading="lazy"
-                    className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
-                  <button onClick={() => toggleWish(p.id)}
+                <Link to="/product/$id" params={{ id: p.id }} className="relative block aspect-[4/5] overflow-hidden bg-secondary">
+                  <img src={p.img} alt={p.name} loading="lazy"
+                    className="h-full w-full object-cover object-top transition duration-700 group-hover:scale-105" />
+                  <button onClick={(e) => { e.preventDefault(); toggleWish(p.id); }}
+                    aria-label="Save to wishlist"
                     className="absolute top-3 right-3 h-9 w-9 grid place-items-center rounded-full glass bg-white/70">
                     <Heart className={`h-4 w-4 transition ${wishlist.has(p.id) ? "fill-[color:var(--plum)] text-[color:var(--plum)]" : "text-foreground"}`} />
                   </button>
-                  <div className="absolute bottom-3 left-3 glass rounded-full px-3 py-1 text-[11px] font-medium bg-white/80">
-                    <span className="text-[color:var(--plum)] font-semibold">{p.fit}%</span> fit for you
-                  </div>
-                  <button onClick={() => setTryOn(p)}
+                  {p.fit > 0 && (
+                    <div className="absolute bottom-3 left-3 glass rounded-full px-3 py-1 text-[11px] font-medium bg-white/80">
+                      <span className="text-[color:var(--plum)] font-semibold">{p.fit}%</span> fit for you
+                    </div>
+                  )}
+                  <button onClick={(e) => { e.preventDefault(); setTryOn(p); }}
                     className="absolute bottom-3 right-3 rounded-full bg-primary text-primary-foreground px-3 py-1.5 text-xs opacity-0 group-hover:opacity-100 transition">
                     Try on
                   </button>
-                </div>
+                </Link>
                 <div className="p-4">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>{p.brand} · {p.retailer}</span>
-                    <span className="flex items-center gap-1"><Star className="h-3 w-3 fill-current" />4.9</span>
-                  </div>
-                  <h3 className="mt-1 font-display text-lg">{p.name}</h3>
+                  <div className="text-xs text-muted-foreground truncate">{p.brand}</div>
+                  <Link to="/product/$id" params={{ id: p.id }} className="mt-1 block font-display text-base sm:text-lg leading-snug line-clamp-2 hover:text-[color:var(--plum)]">{p.name}</Link>
                   <div className="mt-2 flex items-center justify-between">
-                    <span className="font-medium">${p.price}</span>
+                    <span className="font-medium text-sm">{rand(p.price)}</span>
                     <button onClick={() => addToCart(p)} className="rounded-full bg-secondary hover:bg-accent px-3 py-1.5 text-xs font-medium inline-flex items-center gap-1">
                       <ShoppingBag className="h-3.5 w-3.5" /> Add
                     </button>
@@ -391,6 +354,14 @@ function Home() {
               </article>
             ))}
           </div>
+
+          {brand && (
+            <div className="mt-6 text-center">
+              <Link to="/stores/$name" params={{ name: brandSlug(brand) }} className="text-sm text-[color:var(--plum)] hover:underline">
+                See everything from {brand} →
+              </Link>
+            </div>
+          )}
         </div>
       </section>
 
@@ -439,14 +410,14 @@ function Home() {
             <div>
               <div className="text-xs text-muted-foreground">{tryOn.brand} · {tryOn.retailer}</div>
               <h3 className="mt-1 font-display text-3xl">{tryOn.name}</h3>
-              <div className="mt-2 text-xl font-medium">${tryOn.price}</div>
-              <div className="mt-6 rounded-2xl border border-border p-4 flex items-center gap-4">
+              <div className="mt-2 text-xl font-medium">{rand(tryOn.price)}</div>
+              {tryOn.fit > 0 && <div className="mt-6 rounded-2xl border border-border p-4 flex items-center gap-4">
                 <FitRing value={tryOn.fit} small />
                 <div>
                   <div className="font-medium">Fit Confidence · {tryOn.fit}%</div>
                   <div className="text-xs text-muted-foreground">Recommended size: <span className="text-foreground font-medium">M</span> · relaxed shoulder, true to waist</div>
                 </div>
-              </div>
+              </div>}
               <div className="mt-4 flex gap-2">
                 {["XS", "S", "M", "L", "XL"].map((s) => (
                   <button key={s} className={`h-10 w-10 rounded-full border text-sm ${s === "M" ? "bg-primary text-primary-foreground border-primary" : "border-border bg-card hover:bg-accent"}`}>{s}</button>
@@ -489,11 +460,11 @@ function Home() {
                 return (
                   <div key={i} className="rounded-2xl border border-border p-3">
                     <div className="flex gap-3">
-                      <img src={p.img} alt="" className="h-20 w-16 rounded-xl object-cover" />
+                      <img src={p.img} alt="" className="h-20 w-16 rounded-xl object-cover object-top" />
                       <div className="flex-1">
                         <div className="text-xs text-muted-foreground">{p.retailer}</div>
                         <div className="text-sm font-medium">{p.name}</div>
-                        <div className="mt-1 text-sm">${p.price}</div>
+                        <div className="mt-1 text-sm">{rand(p.price)}</div>
                       </div>
                       <button onClick={() => removeFromCart(i)} className="h-8 w-8 grid place-items-center rounded-full hover:bg-accent text-muted-foreground"><X className="h-3.5 w-3.5" /></button>
                     </div>
@@ -508,7 +479,7 @@ function Home() {
                             <div className="mt-0.5 text-xs text-muted-foreground">{rec.tailorName} · ready in {rec.days} day{rec.days !== 1 && "s"}</div>
                           </div>
                           <div className="text-right">
-                            <div className="text-sm font-medium">+${rec.price}</div>
+                            <div className="text-sm font-medium">+{rand(rec.price)}</div>
                             <button
                               onClick={() => shopStore.toggleTailoring(i)}
                               className={`mt-1 rounded-full px-2.5 py-1 text-[11px] border transition ${
@@ -536,16 +507,16 @@ function Home() {
             </div>
             <div className="p-5 border-t border-border space-y-3">
               <div className="flex items-center justify-between text-sm text-muted-foreground">
-                <span>Items</span><span>${itemsTotal}</span>
+                <span>Items</span><span>{rand(itemsTotal)}</span>
               </div>
               {tailoringTotal > 0 && (
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <span>Tailoring</span><span>+${tailoringTotal}</span>
+                  <span>Tailoring</span><span>+{rand(tailoringTotal)}</span>
                 </div>
               )}
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Total</span>
-                <span className="font-display text-2xl">${cartTotal}</span>
+                <span className="font-display text-2xl">{rand(cartTotal)}</span>
               </div>
               {tailoringTotal > 0 && (
                 <div className="rounded-xl bg-secondary p-3 text-[11px] text-muted-foreground">

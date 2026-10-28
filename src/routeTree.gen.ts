@@ -10,14 +10,25 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as CommunityRouteImport } from './routes/community'
 import { Route as JourneyRouteImport } from './routes/journey'
+import { Route as MeasurementsRouteImport } from './routes/measurements'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as ScanRouteImport } from './routes/scan'
+import { Route as ShopRouteImport } from './routes/shop'
 import { Route as StylistRouteImport } from './routes/stylist'
 import { Route as TailorsRouteImport } from './routes/tailors'
 import { Route as TrustRouteImport } from './routes/trust'
+import { Route as TryonRouteImport } from './routes/tryon'
+import { Route as TwinRouteImport } from './routes/twin'
 import { Route as WishlistRouteImport } from './routes/wishlist'
+import { Route as AccountIndexRouteImport } from './routes/account.index'
+import { Route as AccountNotificationsRouteImport } from './routes/account.notifications'
+import { Route as AccountOrdersRouteImport } from './routes/account.orders'
+import { Route as AccountReturnsRouteImport } from './routes/account.returns'
+import { Route as AccountWalletRouteImport } from './routes/account.wallet'
 import { Route as CommunityIndexRouteImport } from './routes/community.index'
 import { Route as CommunityExploreRouteImport } from './routes/community.explore'
 import { Route as CommunityMeRouteImport } from './routes/community.me'
@@ -33,6 +44,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CommunityRoute = CommunityRouteImport.update({
   id: '/community',
   path: '/community',
@@ -43,6 +59,11 @@ const JourneyRoute = JourneyRouteImport.update({
   path: '/journey',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MeasurementsRoute = MeasurementsRouteImport.update({
+  id: '/measurements',
+  path: '/measurements',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
@@ -51,6 +72,16 @@ const OnboardingRoute = OnboardingRouteImport.update({
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ScanRoute = ScanRouteImport.update({
+  id: '/scan',
+  path: '/scan',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShopRoute = ShopRouteImport.update({
+  id: '/shop',
+  path: '/shop',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StylistRoute = StylistRouteImport.update({
@@ -68,10 +99,45 @@ const TrustRoute = TrustRouteImport.update({
   path: '/trust',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TryonRoute = TryonRouteImport.update({
+  id: '/tryon',
+  path: '/tryon',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TwinRoute = TwinRouteImport.update({
+  id: '/twin',
+  path: '/twin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WishlistRoute = WishlistRouteImport.update({
   id: '/wishlist',
   path: '/wishlist',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AccountIndexRoute = AccountIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AccountRoute,
+} as any)
+const AccountNotificationsRoute = AccountNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => AccountRoute,
+} as any)
+const AccountOrdersRoute = AccountOrdersRouteImport.update({
+  id: '/orders',
+  path: '/orders',
+  getParentRoute: () => AccountRoute,
+} as any)
+const AccountReturnsRoute = AccountReturnsRouteImport.update({
+  id: '/returns',
+  path: '/returns',
+  getParentRoute: () => AccountRoute,
+} as any)
+const AccountWalletRoute = AccountWalletRouteImport.update({
+  id: '/wallet',
+  path: '/wallet',
+  getParentRoute: () => AccountRoute,
 } as any)
 const CommunityIndexRoute = CommunityIndexRouteImport.update({
   id: '/',
@@ -121,20 +187,31 @@ const CommunityProfileIdRoute = CommunityProfileIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/account': typeof AccountRouteWithChildren
   '/community': typeof CommunityRouteWithChildren
   '/journey': typeof JourneyRoute
+  '/measurements': typeof MeasurementsRoute
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
+  '/scan': typeof ScanRoute
+  '/shop': typeof ShopRoute
   '/stylist': typeof StylistRoute
   '/tailors': typeof TailorsRoute
   '/trust': typeof TrustRoute
+  '/tryon': typeof TryonRoute
+  '/twin': typeof TwinRoute
   '/wishlist': typeof WishlistRoute
+  '/account/notifications': typeof AccountNotificationsRoute
+  '/account/orders': typeof AccountOrdersRoute
+  '/account/returns': typeof AccountReturnsRoute
+  '/account/wallet': typeof AccountWalletRoute
   '/community/explore': typeof CommunityExploreRoute
   '/community/me': typeof CommunityMeRoute
   '/community/messages': typeof CommunityMessagesRoute
   '/community/stylestream': typeof CommunityStylestreamRoute
   '/product/$id': typeof ProductIdRoute
   '/stores/$name': typeof StoresNameRoute
+  '/account/': typeof AccountIndexRoute
   '/community/': typeof CommunityIndexRoute
   '/stores/': typeof StoresIndexRoute
   '/community/profile/$id': typeof CommunityProfileIdRoute
@@ -142,18 +219,28 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/journey': typeof JourneyRoute
+  '/measurements': typeof MeasurementsRoute
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
+  '/scan': typeof ScanRoute
+  '/shop': typeof ShopRoute
   '/stylist': typeof StylistRoute
   '/tailors': typeof TailorsRoute
   '/trust': typeof TrustRoute
+  '/tryon': typeof TryonRoute
+  '/twin': typeof TwinRoute
   '/wishlist': typeof WishlistRoute
+  '/account/notifications': typeof AccountNotificationsRoute
+  '/account/orders': typeof AccountOrdersRoute
+  '/account/returns': typeof AccountReturnsRoute
+  '/account/wallet': typeof AccountWalletRoute
   '/community/explore': typeof CommunityExploreRoute
   '/community/me': typeof CommunityMeRoute
   '/community/messages': typeof CommunityMessagesRoute
   '/community/stylestream': typeof CommunityStylestreamRoute
   '/product/$id': typeof ProductIdRoute
   '/stores/$name': typeof StoresNameRoute
+  '/account': typeof AccountIndexRoute
   '/community': typeof CommunityIndexRoute
   '/stores': typeof StoresIndexRoute
   '/community/profile/$id': typeof CommunityProfileIdRoute
@@ -161,20 +248,31 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/account': typeof AccountRouteWithChildren
   '/community': typeof CommunityRouteWithChildren
   '/journey': typeof JourneyRoute
+  '/measurements': typeof MeasurementsRoute
   '/onboarding': typeof OnboardingRoute
   '/privacy': typeof PrivacyRoute
+  '/scan': typeof ScanRoute
+  '/shop': typeof ShopRoute
   '/stylist': typeof StylistRoute
   '/tailors': typeof TailorsRoute
   '/trust': typeof TrustRoute
+  '/tryon': typeof TryonRoute
+  '/twin': typeof TwinRoute
   '/wishlist': typeof WishlistRoute
+  '/account/notifications': typeof AccountNotificationsRoute
+  '/account/orders': typeof AccountOrdersRoute
+  '/account/returns': typeof AccountReturnsRoute
+  '/account/wallet': typeof AccountWalletRoute
   '/community/explore': typeof CommunityExploreRoute
   '/community/me': typeof CommunityMeRoute
   '/community/messages': typeof CommunityMessagesRoute
   '/community/stylestream': typeof CommunityStylestreamRoute
   '/product/$id': typeof ProductIdRoute
   '/stores/$name': typeof StoresNameRoute
+  '/account/': typeof AccountIndexRoute
   '/community/': typeof CommunityIndexRoute
   '/stores/': typeof StoresIndexRoute
   '/community/profile/$id': typeof CommunityProfileIdRoute
@@ -183,20 +281,31 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/account'
     | '/community'
     | '/journey'
+    | '/measurements'
     | '/onboarding'
     | '/privacy'
+    | '/scan'
+    | '/shop'
     | '/stylist'
     | '/tailors'
     | '/trust'
+    | '/tryon'
+    | '/twin'
     | '/wishlist'
+    | '/account/notifications'
+    | '/account/orders'
+    | '/account/returns'
+    | '/account/wallet'
     | '/community/explore'
     | '/community/me'
     | '/community/messages'
     | '/community/stylestream'
     | '/product/$id'
     | '/stores/$name'
+    | '/account/'
     | '/community/'
     | '/stores/'
     | '/community/profile/$id'
@@ -204,38 +313,59 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/journey'
+    | '/measurements'
     | '/onboarding'
     | '/privacy'
+    | '/scan'
+    | '/shop'
     | '/stylist'
     | '/tailors'
     | '/trust'
+    | '/tryon'
+    | '/twin'
     | '/wishlist'
+    | '/account/notifications'
+    | '/account/orders'
+    | '/account/returns'
+    | '/account/wallet'
     | '/community/explore'
     | '/community/me'
     | '/community/messages'
     | '/community/stylestream'
     | '/product/$id'
     | '/stores/$name'
+    | '/account'
     | '/community'
     | '/stores'
     | '/community/profile/$id'
   id:
     | '__root__'
     | '/'
+    | '/account'
     | '/community'
     | '/journey'
+    | '/measurements'
     | '/onboarding'
     | '/privacy'
+    | '/scan'
+    | '/shop'
     | '/stylist'
     | '/tailors'
     | '/trust'
+    | '/tryon'
+    | '/twin'
     | '/wishlist'
+    | '/account/notifications'
+    | '/account/orders'
+    | '/account/returns'
+    | '/account/wallet'
     | '/community/explore'
     | '/community/me'
     | '/community/messages'
     | '/community/stylestream'
     | '/product/$id'
     | '/stores/$name'
+    | '/account/'
     | '/community/'
     | '/stores/'
     | '/community/profile/$id'
@@ -243,13 +373,19 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountRoute: typeof AccountRouteWithChildren
   CommunityRoute: typeof CommunityRouteWithChildren
   JourneyRoute: typeof JourneyRoute
+  MeasurementsRoute: typeof MeasurementsRoute
   OnboardingRoute: typeof OnboardingRoute
   PrivacyRoute: typeof PrivacyRoute
+  ScanRoute: typeof ScanRoute
+  ShopRoute: typeof ShopRoute
   StylistRoute: typeof StylistRoute
   TailorsRoute: typeof TailorsRoute
   TrustRoute: typeof TrustRoute
+  TryonRoute: typeof TryonRoute
+  TwinRoute: typeof TwinRoute
   WishlistRoute: typeof WishlistRoute
   ProductIdRoute: typeof ProductIdRoute
   StoresNameRoute: typeof StoresNameRoute
@@ -263,6 +399,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/community': {
@@ -279,6 +422,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JourneyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/measurements': {
+      id: '/measurements'
+      path: '/measurements'
+      fullPath: '/measurements'
+      preLoaderRoute: typeof MeasurementsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/onboarding': {
       id: '/onboarding'
       path: '/onboarding'
@@ -291,6 +441,20 @@ declare module '@tanstack/react-router' {
       path: '/privacy'
       fullPath: '/privacy'
       preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/scan': {
+      id: '/scan'
+      path: '/scan'
+      fullPath: '/scan'
+      preLoaderRoute: typeof ScanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/shop': {
+      id: '/shop'
+      path: '/shop'
+      fullPath: '/shop'
+      preLoaderRoute: typeof ShopRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/stylist': {
@@ -314,12 +478,61 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TrustRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tryon': {
+      id: '/tryon'
+      path: '/tryon'
+      fullPath: '/tryon'
+      preLoaderRoute: typeof TryonRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/twin': {
+      id: '/twin'
+      path: '/twin'
+      fullPath: '/twin'
+      preLoaderRoute: typeof TwinRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/wishlist': {
       id: '/wishlist'
       path: '/wishlist'
       fullPath: '/wishlist'
       preLoaderRoute: typeof WishlistRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/account/': {
+      id: '/account/'
+      path: '/'
+      fullPath: '/account/'
+      preLoaderRoute: typeof AccountIndexRouteImport
+      parentRoute: typeof AccountRoute
+    }
+    '/account/notifications': {
+      id: '/account/notifications'
+      path: '/notifications'
+      fullPath: '/account/notifications'
+      preLoaderRoute: typeof AccountNotificationsRouteImport
+      parentRoute: typeof AccountRoute
+    }
+    '/account/orders': {
+      id: '/account/orders'
+      path: '/orders'
+      fullPath: '/account/orders'
+      preLoaderRoute: typeof AccountOrdersRouteImport
+      parentRoute: typeof AccountRoute
+    }
+    '/account/returns': {
+      id: '/account/returns'
+      path: '/returns'
+      fullPath: '/account/returns'
+      preLoaderRoute: typeof AccountReturnsRouteImport
+      parentRoute: typeof AccountRoute
+    }
+    '/account/wallet': {
+      id: '/account/wallet'
+      path: '/wallet'
+      fullPath: '/account/wallet'
+      preLoaderRoute: typeof AccountWalletRouteImport
+      parentRoute: typeof AccountRoute
     }
     '/community/': {
       id: '/community/'
@@ -387,6 +600,25 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AccountRouteChildren {
+  AccountNotificationsRoute: typeof AccountNotificationsRoute
+  AccountOrdersRoute: typeof AccountOrdersRoute
+  AccountReturnsRoute: typeof AccountReturnsRoute
+  AccountWalletRoute: typeof AccountWalletRoute
+  AccountIndexRoute: typeof AccountIndexRoute
+}
+
+const AccountRouteChildren: AccountRouteChildren = {
+  AccountNotificationsRoute: AccountNotificationsRoute,
+  AccountOrdersRoute: AccountOrdersRoute,
+  AccountReturnsRoute: AccountReturnsRoute,
+  AccountWalletRoute: AccountWalletRoute,
+  AccountIndexRoute: AccountIndexRoute,
+}
+
+const AccountRouteWithChildren =
+  AccountRoute._addFileChildren(AccountRouteChildren)
+
 interface CommunityRouteChildren {
   CommunityExploreRoute: typeof CommunityExploreRoute
   CommunityMeRoute: typeof CommunityMeRoute
@@ -411,13 +643,19 @@ const CommunityRouteWithChildren = CommunityRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountRoute: AccountRouteWithChildren,
   CommunityRoute: CommunityRouteWithChildren,
   JourneyRoute: JourneyRoute,
+  MeasurementsRoute: MeasurementsRoute,
   OnboardingRoute: OnboardingRoute,
   PrivacyRoute: PrivacyRoute,
+  ScanRoute: ScanRoute,
+  ShopRoute: ShopRoute,
   StylistRoute: StylistRoute,
   TailorsRoute: TailorsRoute,
   TrustRoute: TrustRoute,
+  TryonRoute: TryonRoute,
+  TwinRoute: TwinRoute,
   WishlistRoute: WishlistRoute,
   ProductIdRoute: ProductIdRoute,
   StoresNameRoute: StoresNameRoute,

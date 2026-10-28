@@ -1,28 +1,54 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Heart, ShoppingBag, Star, MapPin, Ruler, Truck, RefreshCw, Check, ArrowLeft, Scissors, Shirt,
   Store, Navigation, Search, Loader2, Phone, Clock, PackageCheck, PackageX, Package,
 } from "lucide-react";
 import twinImg from "@/assets/twin.jpg";
 import { Nav } from "@/components/Nav";
-import { getProduct, PRODUCTS, shopStore, useShop } from "@/lib/shop-store";
+import { ProductTryOn } from "@/components/ProductTryOn";
+import { shopStore, useShop, type Product } from "@/lib/shop-store";
+import { productsApi, rand, type ApiProduct, type ApiProductDetail } from "@/lib/products-api";
 
+// Adapt an API product (detail or card) to the `Product` shape the cart/wishlist
+// store expects. Fields the catalogue can't supply yet get safe defaults.
+function toProduct(p: ApiProductDetail | ApiProduct): Product {
+  const detail = p as Partial<ApiProductDetail>;
+  return {
+    id: p.id,
+    name: p.name ?? "",
+    brand: p.brand ?? "Superbalist",
+    price: p.price ?? 0,
+    img: p.img ?? "",
+    retailer: p.retailer ?? "Superbalist",
+    category: p.category ?? "",
+    fit: p.fit ?? 0,
+    description: detail.description ?? "",
+    sizes: detail.sizes ?? [],
+    materials: detail.material ?? "",
+    care: "",
+    tailorTips: detail.tailorTips ?? [],
+  };
+}
 
 export const Route = createFileRoute("/product/$id")({
-  loader: ({ params }) => {
-    const product = getProduct(params.id);
-    if (!product) throw notFound();
-    return { product };
+  // async now: the product is fetched from the products API on demand
+  loader: async ({ params }) => {
+    try {
+      const product = await productsApi.detail(params.id);
+      return { product };
+    } catch {
+      throw notFound();
+    }
   },
   head: ({ loaderData }) => ({
     meta: loaderData
       ? [
-          { title: `${loaderData.product.name} — ${loaderData.product.brand} · Mannequin AI` },
-          { name: "description", content: loaderData.product.description.slice(0, 155) },
-          { property: "og:title", content: `${loaderData.product.name} — ${loaderData.product.brand}` },
-          { property: "og:description", content: loaderData.product.description.slice(0, 155) },
-          { property: "og:image", content: loaderData.product.img },
+          { title: `${loaderData.product.name} — ${loaderData.product.brand ?? "Superbalist"} · Mannequin AI` },
+          { name: "description", content: (loaderData.product.description ?? loaderData.product.name ?? "").slice(0, 155) },
+          { property: "og:title", content: `${loaderData.product.name} — ${loaderData.product.brand ?? "Superbalist"}` },
+          { property: "og:description", content: (loaderData.product.description ?? loaderData.product.name ?? "").slice(0, 155) },
+          { property: "og:image", content: loaderData.product.img ?? "" },
         ]
       : [{ title: "Product · Mannequin AI" }, { name: "robots", content: "noindex" }],
   }),
@@ -38,15 +64,45 @@ export const Route = createFileRoute("/product/$id")({
 });
 
 function ProductPage() {
-  const { product } = Route.useLoaderData();
+  const { product: apiProduct } = Route.useLoaderData();
+  const product = toProduct(apiProduct);
   const { wishlist } = useShop();
-  const [size, setSize] = useState(product.sizes[Math.floor(product.sizes.length / 2)]);
+  const [size, setSize] = useState<string>(
+    product.sizes.length ? product.sizes[Math.floor(product.sizes.length / 2)] : "",
+  );
   const [addedToast, setAddedToast] = useState(false);
   const inWish = wishlist.has(product.id);
 
-  const related = PRODUCTS.filter((p) => p.id !== product.id && p.category === product.category).slice(0, 3);
-  const fallbackRelated = PRODUCTS.filter((p) => p.id !== product.id).slice(0, 3);
-  const suggestions = related.length ? related : fallbackRelated;
+  // Keep the recommended size valid once sizes load.
+  useEffect(() => {
+    if (product.sizes.length && !product.sizes.includes(size)) {
+      setSize(product.sizes[Math.floor(product.sizes.length / 2)]);
+    }
+  }, [product.sizes, size]);
+
+  // Related pieces in the same category (real products from the API).
+  const [related, setRelated] = useState<Product[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    productsApi
+      .list({ category: product.category || undefined, gender: apiProduct.gender || undefined, page_size: 4 })
+      .then((res) => {
+        if (cancelled) return;
+        setRelated(res.items.filter((p) => p.id !== product.id).slice(0, 3).map(toProduct));
+      })
+      .catch(() => { /* non-fatal: just no suggestions */ });
+    return () => { cancelled = true; };
+  }, [product.id, product.category, apiProduct.gender]);
+
+  const hasFit = typeof apiProduct.fit === "number" && apiProduct.fit > 0;
+  const gallery: string[] = Array.from(
+    new Set((apiProduct.images && apiProduct.images.length ? apiProduct.images : [product.img]).filter(Boolean)),
+  );
+  // Which gallery image is shown large. Back to the first one when the product changes.
+  const [activeIdx, setActiveIdx] = useState(0);
+  useEffect(() => { setActiveIdx(0); }, [product.id]);
+  const mainImg = gallery[activeIdx] ?? product.img;
+  const priceLabel = rand(product.price);
 
   const onAdd = () => {
     shopStore.addToCart(product);
@@ -59,18 +115,24 @@ function ProductPage() {
       <Nav />
 
       <main className="mx-auto max-w-7xl px-6 pt-24 pb-24">
-        <Link to="/" hash="shop" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-3 w-3" /> Marketplace
+        <Link to="/shop" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-3 w-3" /> Shop
         </Link>
 
         <div className="mt-6 grid lg:grid-cols-[1.05fr_1fr] gap-12 items-start">
           {/* Gallery + virtual twin preview */}
           <div className="space-y-4">
             <div className="relative rounded-[2rem] overflow-hidden shadow-[var(--shadow-lux)] aspect-[4/5] bg-secondary">
-              <img src={product.img} alt={product.name} className="h-full w-full object-cover" />
-              <div className="absolute top-4 left-4 glass rounded-full px-3 py-1 text-xs font-medium bg-white/80">
-                <span className="text-[color:var(--plum)] font-semibold">{product.fit}%</span> fit for you
-              </div>
+              {mainImg ? (
+                <img key={mainImg} src={mainImg} alt={product.name} className="h-full w-full object-cover object-top animate-fade-up" />
+              ) : (
+                <div className="h-full w-full bg-secondary" />
+              )}
+              {hasFit && (
+                <div className="absolute top-4 left-4 glass rounded-full px-3 py-1 text-xs font-medium bg-white/80">
+                  <span className="text-[color:var(--plum)] font-semibold">{apiProduct.fit}%</span> fit for you
+                </div>
+              )}
               <button
                 onClick={() => shopStore.toggleWish(product.id)}
                 className="absolute top-4 right-4 h-10 w-10 grid place-items-center rounded-full glass bg-white/80"
@@ -79,14 +141,29 @@ function ProductPage() {
                 <Heart className={`h-4 w-4 transition ${inWish ? "fill-[color:var(--plum)] text-[color:var(--plum)]" : "text-foreground"}`} />
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-4 gap-3">
+              {/* Try-on preview tile (placeholder until the try-on backend is wired) */}
               <div className="relative rounded-2xl overflow-hidden aspect-square" style={{ background: "var(--gradient-plum)" }}>
                 <img src={twinImg} alt="On your twin" className="h-full w-full object-cover mix-blend-screen opacity-80" />
-                <img src={product.img} alt="" className="absolute inset-0 h-full w-full object-contain p-3 mix-blend-multiply opacity-90" />
+                {product.img && <img src={product.img} alt="" className="absolute inset-0 h-full w-full object-contain p-3 mix-blend-multiply opacity-90" />}
                 <div className="absolute bottom-1 left-1 right-1 glass rounded-full px-2 py-0.5 text-[10px] bg-white/80 text-center">On your twin</div>
               </div>
-              <img src={product.img} alt="" className="rounded-2xl object-cover aspect-square" />
-              <img src={product.img} alt="" className="rounded-2xl object-cover aspect-square opacity-80" />
+              {/* Clickable thumbnails: clicking one swaps the large image above */}
+              {gallery.slice(0, 7).map((src, i) => (
+                <button
+                  key={src}
+                  onClick={() => setActiveIdx(i)}
+                  aria-label={`Show image ${i + 1}`}
+                  aria-pressed={i === activeIdx}
+                  className={`relative rounded-2xl overflow-hidden aspect-square bg-secondary transition ${
+                    i === activeIdx
+                      ? "ring-2 ring-[color:var(--plum)] ring-offset-2 ring-offset-background"
+                      : "opacity-75 hover:opacity-100"
+                  }`}
+                >
+                  <img src={src} alt="" loading="lazy" className="h-full w-full object-cover object-top" />
+                </button>
+              ))}
             </div>
           </div>
 
@@ -95,32 +172,69 @@ function ProductPage() {
             <div className="text-xs text-muted-foreground uppercase tracking-widest">{product.brand} · {product.retailer}</div>
             <h1 className="mt-2 font-display text-4xl md:text-5xl">{product.name}</h1>
             <div className="mt-3 flex items-center gap-4 text-sm">
-              <span className="font-display text-2xl">${product.price}</span>
+              <span className="font-display text-2xl">{priceLabel}</span>
               <span className="flex items-center gap-1 text-muted-foreground"><Star className="h-3.5 w-3.5 fill-current" /> 4.9 (312)</span>
             </div>
 
-            <p className="mt-6 text-muted-foreground leading-relaxed">{product.description}</p>
+            {product.description && <p className="mt-6 text-muted-foreground leading-relaxed">{product.description}</p>}
+
+            {/* Colour options — sibling colour variants from Superbalist */}
+            {apiProduct.colourOptions && apiProduct.colourOptions.length > 0 && (
+              <div className="mt-8">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
+                  Colour{apiProduct.colour ? <span className="text-foreground font-medium normal-case tracking-normal">· {apiProduct.colour}</span> : null}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-3">
+                  {/* current product first, as a selected swatch */}
+                  <span
+                    className="relative h-16 w-16 rounded-2xl overflow-hidden border-2 border-[color:var(--plum)] shrink-0"
+                    title={apiProduct.colour ?? "Current"}
+                  >
+                    {product.img && <img src={product.img} alt={apiProduct.colour ?? ""} className="h-full w-full object-cover" />}
+                  </span>
+                  {apiProduct.colourOptions
+                    .filter((c: ApiProductDetail["colourOptions"][number]) => String(c.id) !== product.id)
+                    .map((c: ApiProductDetail["colourOptions"][number]) => (
+                      <Link
+                        key={c.id}
+                        to="/product/$id"
+                        params={{ id: String(c.id) }}
+                        className="relative h-16 w-16 rounded-2xl overflow-hidden border border-border hover:border-[color:var(--plum)] transition shrink-0"
+                        title={c.colour ?? "Other colour"}
+                      >
+                        {c.image ? (
+                          <img src={c.image} alt={c.colour ?? ""} className="h-full w-full object-cover" />
+                        ) : (
+                          <span className="grid h-full w-full place-items-center text-[10px] text-muted-foreground capitalize">{c.colour}</span>
+                        )}
+                      </Link>
+                    ))}
+                </div>
+              </div>
+            )}
 
             {/* Sizes */}
-            <div className="mt-8">
-              <div className="flex items-center justify-between text-xs uppercase tracking-widest text-muted-foreground">
-                <span className="inline-flex items-center gap-1.5"><Ruler className="h-3 w-3" /> Size range</span>
-                <span>Recommended: <span className="text-foreground font-medium">{size}</span></span>
+            {product.sizes.length > 0 && (
+              <div className="mt-8">
+                <div className="flex items-center justify-between text-xs uppercase tracking-widest text-muted-foreground">
+                  <span className="inline-flex items-center gap-1.5"><Ruler className="h-3 w-3" /> Size range</span>
+                  {size && <span>Recommended: <span className="text-foreground font-medium">{size}</span></span>}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {product.sizes.map((s: string) => (
+                    <button
+                      key={s}
+                      onClick={() => setSize(s)}
+                      className={`min-w-11 h-11 px-3 rounded-full border text-sm transition ${
+                        s === size ? "bg-primary text-primary-foreground border-primary" : "border-border bg-card hover:bg-accent"
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {product.sizes.map((s: string) => (
-                  <button
-                    key={s}
-                    onClick={() => setSize(s)}
-                    className={`min-w-11 h-11 px-3 rounded-full border text-sm transition ${
-                      s === size ? "bg-primary text-primary-foreground border-primary" : "border-border bg-card hover:bg-accent"
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
+            )}
 
             {/* Add to cart / wishlist */}
             <div className="mt-6 flex gap-2">
@@ -128,7 +242,7 @@ function ProductPage() {
                 onClick={onAdd}
                 className="flex-1 rounded-full bg-primary text-primary-foreground py-3.5 text-sm inline-flex items-center justify-center gap-2 shadow-[var(--shadow-lux)]"
               >
-                <ShoppingBag className="h-4 w-4" /> Add to universal cart · ${product.price}
+                <ShoppingBag className="h-4 w-4" /> Add to universal cart{priceLabel ? ` · ${priceLabel}` : ""}
               </button>
               <button
                 onClick={() => shopStore.toggleWish(product.id)}
@@ -140,6 +254,9 @@ function ProductPage() {
                 <Heart className={`h-5 w-5 ${inWish ? "fill-[color:var(--plum)] text-[color:var(--plum)]" : ""}`} />
               </button>
             </div>
+
+            {/* Try it on: not shown for kids' products */}
+            <ProductTryOn product={apiProduct} />
 
             {addedToast && (
               <div className="mt-3 inline-flex items-center gap-2 text-xs text-emerald-700 bg-emerald-500/10 px-3 py-1.5 rounded-full">
@@ -161,83 +278,85 @@ function ProductPage() {
             </div>
 
             {/* Materials */}
-            <div className="mt-8 rounded-2xl border border-border bg-card p-5">
-              <div className="text-xs uppercase tracking-widest text-muted-foreground">Materials & care</div>
-              <div className="mt-2 text-sm">{product.materials}</div>
-              <div className="mt-1 text-sm text-muted-foreground">{product.care}</div>
-            </div>
+            {product.materials && (
+              <div className="mt-8 rounded-2xl border border-border bg-card p-5">
+                <div className="text-xs uppercase tracking-widest text-muted-foreground">Materials & care</div>
+                <div className="mt-2 text-sm">{product.materials}</div>
+                {product.care && <div className="mt-1 text-sm text-muted-foreground">{product.care}</div>}
+              </div>
+            )}
 
-            {/* Tailor recommendations */}
-            <div className="mt-6 rounded-3xl border border-border bg-card p-5 shadow-[var(--shadow-card)]">
-              <div className="flex items-center gap-2">
-                <span className="h-9 w-9 grid place-items-center rounded-full" style={{ background: "var(--gradient-plum)" }}>
-                  <Scissors className="h-4 w-4 text-white" />
-                </span>
-                <div>
-                  <div className="font-medium">Tailor recommendations</div>
-                  <div className="text-xs text-muted-foreground">Personalised for your Digital Twin · size {size}</div>
+            {/* Tailor recommendations — only when the AI backend supplies tips */}
+            {product.tailorTips.length > 0 && (
+              <div className="mt-6 rounded-3xl border border-border bg-card p-5 shadow-[var(--shadow-card)]">
+                <div className="flex items-center gap-2">
+                  <span className="h-9 w-9 grid place-items-center rounded-full" style={{ background: "var(--gradient-plum)" }}>
+                    <Scissors className="h-4 w-4 text-white" />
+                  </span>
+                  <div>
+                    <div className="font-medium">Tailor recommendations</div>
+                    <div className="text-xs text-muted-foreground">Personalised for your Digital Twin · size {size}</div>
+                  </div>
+                </div>
+                <ul className="mt-4 space-y-2 text-sm">
+                  {product.tailorTips.map((tip: string) => (
+                    <li key={tip} className="flex gap-2">
+                      <Check className="mt-0.5 h-4 w-4 text-[color:var(--plum)] shrink-0" />
+                      <span>{tip}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl bg-secondary/60 p-3">
+                  <div className="flex-1 text-xs">
+                    <div className="font-medium text-foreground">Atelier Rosen</div>
+                    <div className="text-muted-foreground">0.8 km · 4.9★ · 2-day turnaround</div>
+                  </div>
+                  <button className="rounded-full bg-primary text-primary-foreground px-4 py-2 text-xs inline-flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5" /> Book tailor
+                  </button>
                 </div>
               </div>
-              <ul className="mt-4 space-y-2 text-sm">
-                {product.tailorTips.map((tip: string) => (
-                  <li key={tip} className="flex gap-2">
-                    <Check className="mt-0.5 h-4 w-4 text-[color:var(--plum)] shrink-0" />
-                    <span>{tip}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl bg-secondary/60 p-3">
-                <div className="flex-1 text-xs">
-                  <div className="font-medium text-foreground">Atelier Rosen</div>
-                  <div className="text-muted-foreground">0.8 km · 4.9★ · 2-day turnaround</div>
-                </div>
-                <button className="rounded-full bg-primary text-primary-foreground px-4 py-2 text-xs inline-flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5" /> Book tailor
-                </button>
-            </div>
+            )}
 
             {/* Find in store */}
             <FindInStore productId={product.id} productName={product.name} size={size} retailer={product.retailer} />
           </div>
-
-          </div>
         </div>
 
         {/* Complete the look */}
-        <section className="mt-24">
-          <div className="flex items-end justify-between">
-            <div>
-              <div className="inline-flex items-center gap-2 text-xs tracking-[0.3em] uppercase text-[color:var(--plum)] font-medium">
-                <span className="h-px w-6 bg-[color:var(--plum)]" /> Complete the look
+        {related.length > 0 && (
+          <section className="mt-24">
+            <div className="flex items-end justify-between">
+              <div>
+                <div className="inline-flex items-center gap-2 text-xs tracking-[0.3em] uppercase text-[color:var(--plum)] font-medium">
+                  <span className="h-px w-6 bg-[color:var(--plum)]" /> Complete the look
+                </div>
+                <h2 className="mt-2 font-display text-3xl md:text-4xl">Styled by your AI</h2>
               </div>
-              <h2 className="mt-2 font-display text-3xl md:text-4xl">Styled by your AI</h2>
+              <Link to="/shop" className="text-sm text-muted-foreground hover:text-foreground">View all →</Link>
             </div>
-            <Link to="/" hash="shop" className="text-sm text-muted-foreground hover:text-foreground">View all →</Link>
-          </div>
 
-          <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {suggestions.map((p) => (
-              <Link
-                key={p.id}
-                to="/product/$id"
-                params={{ id: p.id }}
-                className="group rounded-3xl overflow-hidden bg-card border border-border shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-lux)] transition"
-              >
-                <div className="relative aspect-[4/5] overflow-hidden bg-secondary">
-                  <img src={p.img} alt={p.name} className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
-                  <div className="absolute bottom-3 left-3 glass rounded-full px-3 py-1 text-[11px] font-medium bg-white/80">
-                    <span className="text-[color:var(--plum)] font-semibold">{p.fit}%</span> fit
+            <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {related.map((p) => (
+                <Link
+                  key={p.id}
+                  to="/product/$id"
+                  params={{ id: p.id }}
+                  className="group rounded-3xl overflow-hidden bg-card border border-border shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-lux)] transition"
+                >
+                  <div className="relative aspect-[4/5] overflow-hidden bg-secondary">
+                    {p.img && <img src={p.img} alt={p.name} className="h-full w-full object-cover object-top transition duration-700 group-hover:scale-105" />}
                   </div>
-                </div>
-                <div className="p-4">
-                  <div className="text-xs text-muted-foreground">{p.brand} · {p.retailer}</div>
-                  <div className="mt-1 font-display text-lg">{p.name}</div>
-                  <div className="mt-1 text-sm">${p.price}</div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
+                  <div className="p-4">
+                    <div className="text-xs text-muted-foreground">{p.brand} · {p.retailer}</div>
+                    <div className="mt-1 font-display text-lg">{p.name}</div>
+                    {p.price ? <div className="mt-1 text-sm">{rand(p.price)}</div> : null}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
       </main>
 
       <footer className="border-t border-border">
@@ -250,7 +369,7 @@ function ProductPage() {
   );
 }
 
-// ---------- Find in Store ----------
+// ---------- Find in Store (unchanged — physical-stock demo) ----------
 
 type StoreStock = {
   id: string;
@@ -440,4 +559,3 @@ function FindInStore({ productId, productName, size, retailer }: { productId: st
     </div>
   );
 }
-
