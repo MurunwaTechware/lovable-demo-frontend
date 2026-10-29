@@ -70,18 +70,18 @@ export function ProductTryOn({ product }: { product: ApiProductDetail }) {
 
 function TryOnPanel({ product, plan }: { product: ApiProductDetail; plan: TryOnPlan }) {
   const { slot } = plan;
-  const tryOnPhotos = useTryOnPhotos();
+  const { photos: tryOnPhotos } = useTryOnPhotos(); // null until loaded
   const defaults = useQuery({ queryKey: ["tryon-defaults"], queryFn: getTryOnDefaults });
 
   // The product's own photos. The products API serves the n-th one, so this is its index in that list.
   const images = product.images ?? [];
   const [imageIdx, setImageIdx] = useState(0);
 
-  // Start with the user's saved full body photo, as on the try-on page
-  const saved = TRY_ON_PHOTO_KINDS.filter((k) => tryOnPhotos[k]);
-  const [personSource, setPersonSource] = useState<TryOnPhotoKind | "upload" | null>(
-    saved[0] ?? null,
-  );
+  // Their try-on photos (each is theirs, or a sample where they have none). Until they choose,
+  // the full body photo is used, once it has loaded.
+  const saved = tryOnPhotos ? TRY_ON_PHOTO_KINDS : [];
+  const [chosen, setChosen] = useState<TryOnPhotoKind | "upload" | null>(null);
+  const personSource = chosen ?? (tryOnPhotos ? "full_body" : null);
   const [uploadedPerson, setUploadedPerson] = useState<Picked | null>(null);
   const [status, setStatus] = useState<{ text: string; error?: boolean }>({ text: "" });
   const [busy, setBusy] = useState(false);
@@ -97,11 +97,14 @@ function TryOnPanel({ product, plan }: { product: ApiProductDetail; plan: TryOnP
   const person: Picked | null =
     personSource === "upload"
       ? uploadedPerson
-      : personSource && tryOnPhotos[personSource]
+      : personSource && tryOnPhotos
         ? {
-            src: tryOnPhotos[personSource]!.src,
+            src: tryOnPhotos[personSource].src,
             file: null,
-            tag: `Your ${TRY_ON_PHOTO_LABELS[personSource].toLowerCase()} photo`,
+            tag:
+              tryOnPhotos[personSource].source === "sample"
+                ? `Sample ${TRY_ON_PHOTO_LABELS[personSource].toLowerCase()} photo`
+                : `Your ${TRY_ON_PHOTO_LABELS[personSource].toLowerCase()} photo`,
           }
         : null;
   const canGenerate = !!person && images.length > 0 && !busy;
@@ -120,7 +123,7 @@ function TryOnPanel({ product, plan }: { product: ApiProductDetail; plan: TryOnP
     const src = URL.createObjectURL(file);
     objectUrls.current.push(src);
     setUploadedPerson({ src, file, tag: "Uploaded photo" });
-    setPersonSource("upload");
+    setChosen("upload");
   };
 
   const generate = async () => {
@@ -201,8 +204,8 @@ function TryOnPanel({ product, plan }: { product: ApiProductDetail; plan: TryOnP
           person={person}
           source={personSource}
           saved={saved}
-          savedSrc={(k) => tryOnPhotos[k]?.src ?? ""}
-          onUseSaved={setPersonSource}
+          savedSrc={(k) => tryOnPhotos?.[k].src ?? ""}
+          onUseSaved={setChosen}
           onUpload={acceptPerson}
         />
 

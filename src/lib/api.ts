@@ -138,3 +138,24 @@ export const generateTryOn = (form: FormData) =>
   });
 export const saveTryOn = (form: FormData) =>
   request<{ saved_id: string }>("/try-on/save", { method: "POST", body: form });
+
+// ── Try-on photos ─────────────────────────────────────────────────────────────
+
+/**
+ * GET /me/tryon-photos: the signed-in user's own full body and close-up photo. "uploaded" is one they
+ * added on the twin page; "scan" (full body only) is the front photo of their latest finished scan.
+ * null when they have neither, and the app shows its sample photo.
+ */
+export type BackendTryOnPhoto = { url: string; added: string; source: "uploaded" | "scan" };
+export type BackendTryOnPhotos = Record<"full_body" | "close_up", BackendTryOnPhoto | null>;
+
+export const getTryOnPhotos = () => request<BackendTryOnPhotos>("/me/tryon-photos");
+/** PUT /me/tryon-photos/{kind}: replace one for this user only. Answers with both photos. */
+export function replaceTryOnPhoto(kind: "full_body" | "close_up", photo: File) {
+  const form = new FormData();
+  form.append("photo", photo);
+  return request<BackendTryOnPhotos>(`/me/tryon-photos/${kind}`, { method: "PUT", body: form });
+}
+/** DELETE /me/tryon-photos/{kind}: back to the scan photo or the sample. Answers with both photos. */
+export const removeTryOnPhoto = (kind: "full_body" | "close_up") =>
+  request<BackendTryOnPhotos>(`/me/tryon-photos/${kind}`, { method: "DELETE" });

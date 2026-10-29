@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   ScanLine,
   Ruler,
@@ -34,12 +34,13 @@ import {
   TRY_ON_PHOTO_LABELS,
   describeInputs,
   formatDate,
+  useChangeTryOnPhoto,
+  useTryOnPhotos,
   useTwin,
   type MeasurementProfile,
   type SavedTryOn,
   type ScanPhoto,
   type TryOnPhotoKind,
-  type TryOnPhotos,
 } from "@/lib/twin-store";
 
 export const Route = createFileRoute("/twin")({
@@ -62,7 +63,7 @@ export const Route = createFileRoute("/twin")({
 });
 
 function TwinPage() {
-  const { profiles, latest, tryOns, tryOnPhotos, isLoading, error } = useTwin();
+  const { profiles, latest, tryOns, isLoading, error } = useTwin();
   const earlier = profiles.filter((p) => p !== latest);
   // The ready profile before the latest one, to show what changed since
   const previous = earlier.find((p) => p.status === "ready") ?? null;
@@ -157,7 +158,7 @@ function TwinPage() {
             title="Your try-on photos"
             hint="Every try-on uses these unless you choose others."
           />
-          <TryOnPhotoCard initial={tryOnPhotos} />
+          <TryOnPhotoCard />
         </section>
 
         {/* Saved try-ons */}
@@ -524,29 +525,55 @@ const PHOTO_GUIDE: Record<TryOnPhotoKind, { use: string; tips: string[] }> = {
   },
 };
 
-function TryOnPhotoCard({ initial }: { initial: TryOnPhotos }) {
-  // Demo: new photos are only shown on this page until it's reloaded. Saving them needs the backend.
-  const [photos, setPhotos] = useState<TryOnPhotos>(initial);
+function TryOnPhotoCard() {
+  const { photos, isLoading, error } = useTryOnPhotos();
+  const change = useChangeTryOnPhoto();
   const [index, setIndex] = useState(0);
   const [errors, setErrors] = useState<Partial<Record<TryOnPhotoKind, string>>>({});
+  const [saving, setSaving] = useState<TryOnPhotoKind | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const uploading = useRef<TryOnPhotoKind>("full_body");
-  const objectUrls = useRef<Partial<Record<TryOnPhotoKind, string>>>({});
 
-  useEffect(
-    () => () => {
-      Object.values(objectUrls.current).forEach((u) => u && URL.revokeObjectURL(u));
-    },
-    [],
-  );
+  if (!photos) {
+    return (
+      <div className="mt-6 rounded-3xl border border-border bg-card p-5 shadow-[var(--shadow-card)] text-sm text-muted-foreground">
+        {isLoading ? (
+          <span className="inline-flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading your try-on photos…
+          </span>
+        ) : (
+          <span role="alert">{error ?? "Couldn't load your try-on photos. Please try again."}</span>
+        )}
+      </div>
+    );
+  }
 
-  const added = TRY_ON_PHOTO_KINDS.filter((k) => photos[k]).length;
+  // Photos that are really theirs: added here, or (full body) taken from their scan
+  const own = TRY_ON_PHOTO_KINDS.filter((k) => photos[k].source !== "sample").length;
   const show = (kind: TryOnPhotoKind) => setIndex(TRY_ON_PHOTO_KINDS.indexOf(kind));
 
   const pick = (kind: TryOnPhotoKind) => {
     uploading.current = kind;
     show(kind);
     input.current?.click();
+  };
+
+  // A new photo, or null to remove theirs. Saved for this user only.
+  const save = (kind: TryOnPhotoKind, file: File | null) => {
+    setErrors((e) => ({ ...e, [kind]: undefined }));
+    setSaving(kind);
+    change.mutate(
+      { kind, file },
+      {
+        onError: (err) =>
+          setErrors((e) => ({
+            ...e,
+            [kind]:
+              err instanceof Error ? err.message : "Couldn't save that photo. Please try again.",
+          })),
+        onSettled: () => setSaving(null),
+      },
+    );
   };
 
   const onFile = (file: File | undefined) => {
@@ -556,12 +583,7 @@ function TryOnPhotoCard({ initial }: { initial: TryOnPhotos }) {
     if (!PHOTO_TYPES.includes(file.type)) return fail("Use a JPEG, PNG or WebP photo.");
     if (file.size > MAX_PHOTO_BYTES)
       return fail("That photo is over 7 MB. Resize it and try again.");
-    setErrors((e) => ({ ...e, [kind]: undefined }));
-    const old = objectUrls.current[kind];
-    if (old) URL.revokeObjectURL(old);
-    const url = URL.createObjectURL(file);
-    objectUrls.current[kind] = url;
-    setPhotos((p) => ({ ...p, [kind]: { src: url, updated: new Date().toISOString() } }));
+    save(kind, file);
   };
 
   return (
@@ -578,27 +600,24 @@ function TryOnPhotoCard({ initial }: { initial: TryOnPhotos }) {
           return {
             key: kind,
             label,
-            content: photo ? (
-              <img
-                src={photo.src}
-                alt={`Your ${label.toLowerCase()} try-on photo`}
-                draggable={false}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <button
-                type="button"
-                onClick={() => pick(kind)}
-                className="h-full w-full grid place-items-center text-center p-4 text-sm text-muted-foreground border-2 border-dashed border-border rounded-2xl bg-secondary/50 hover:bg-secondary transition"
-              >
-                <span>
-                  <ImageUp className="mx-auto h-6 w-6 text-[color:var(--plum)]" />
-                  <span className="mt-2 block font-medium text-foreground">
-                    Add a {label.toLowerCase()} photo
+            content: (
+              <div className="relative h-full w-full">
+                <img
+                  src={photo.src}
+                  alt={
+                    photo.source === "sample"
+                      ? `Sample ${label.toLowerCase()} photo`
+                      : `Your ${label.toLowerCase()} try-on photo`
+                  }
+                  draggable={false}
+                  className="h-full w-full object-cover"
+                />
+                {photo.source === "sample" && (
+                  <span className="absolute left-3 bottom-7 rounded-full glass bg-white/85 px-2.5 py-0.5 text-[11px] font-medium text-foreground pointer-events-none">
+                    Sample photo
                   </span>
-                  JPEG, PNG or WebP, up to 7 MB
-                </span>
-              </button>
+                )}
+              </div>
             ),
           };
         })}
@@ -607,18 +626,19 @@ function TryOnPhotoCard({ initial }: { initial: TryOnPhotos }) {
       <div className="flex flex-col min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="font-display text-xl">
-            {added === 2 ? "This is you in every try-on" : "Add two photos for the best try-ons"}
+            {own === 2 ? "This is you in every try-on" : "Add two photos for the best try-ons"}
           </h3>
           <span
-            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${added === 2 ? "bg-[color:var(--plum)]/10 text-[color:var(--plum)]" : "bg-secondary text-muted-foreground"}`}
+            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${own === 2 ? "bg-[color:var(--plum)]/10 text-[color:var(--plum)]" : "bg-secondary text-muted-foreground"}`}
           >
-            {added} of 2 added
+            {own} of 2 added
           </span>
         </div>
         <p className="mt-2 text-sm text-muted-foreground max-w-2xl">
           We recommend adding two photos: a close-up and a full body photo. Clothes go on your full
           body photo. Hats, sunglasses and earrings go on the close-up, where they're big enough to
-          see. You can still pick different photos for a single try-on.
+          see. You can still pick different photos for a single try-on. Your photos are only used
+          for your own try-ons; until you add one, a sample photo stands in.
         </p>
 
         <div className="mt-5 grid md:grid-cols-2 gap-3">
@@ -627,6 +647,7 @@ function TryOnPhotoCard({ initial }: { initial: TryOnPhotos }) {
             const label = TRY_ON_PHOTO_LABELS[kind];
             const guide = PHOTO_GUIDE[kind];
             const showing = i === index;
+            const busy = saving === kind;
             return (
               <div
                 key={kind}
@@ -641,7 +662,11 @@ function TryOnPhotoCard({ initial }: { initial: TryOnPhotos }) {
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="font-medium">{label}</span>
                     <span className="text-xs text-muted-foreground">
-                      {photo ? `Added ${formatDate(photo.updated)}` : "Not added yet"}
+                      {photo.source === "uploaded" && photo.added
+                        ? `Added ${formatDate(photo.added)}`
+                        : photo.source === "scan" && photo.added
+                          ? `From your scan, ${formatDate(photo.added)}`
+                          : "Sample photo"}
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground">{guide.use}</div>
@@ -658,15 +683,41 @@ function TryOnPhotoCard({ initial }: { initial: TryOnPhotos }) {
                     {errors[kind]}
                   </p>
                 )}
-                <div className="mt-auto pt-4">
+                <div className="mt-auto pt-4 flex flex-wrap items-center gap-3">
                   <button
                     type="button"
                     onClick={() => pick(kind)}
-                    className={`rounded-full px-4 py-2 text-sm font-medium inline-flex items-center gap-2 ${photo ? "border border-border bg-background hover:bg-accent" : "bg-primary text-primary-foreground"}`}
+                    disabled={saving !== null}
+                    className={`rounded-full px-4 py-2 text-sm font-medium inline-flex items-center gap-2 disabled:opacity-60 ${photo.source === "sample" ? "bg-primary text-primary-foreground" : "border border-border bg-background hover:bg-accent"}`}
                   >
-                    <ImageUp className="h-4 w-4" />{" "}
-                    {photo ? `Replace ${label.toLowerCase()}` : `Add ${label.toLowerCase()}`}
+                    {busy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ImageUp className="h-4 w-4" />
+                    )}{" "}
+                    {busy
+                      ? "Saving…"
+                      : photo.source === "uploaded"
+                        ? `Replace ${label.toLowerCase()}`
+                        : photo.source === "scan"
+                          ? "Use a different photo"
+                          : `Add ${label.toLowerCase()}`}
                   </button>
+                  {photo.source === "uploaded" && (
+                    <button
+                      type="button"
+                      onClick={() => save(kind, null)}
+                      disabled={saving !== null}
+                      className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline disabled:opacity-60"
+                      title={
+                        kind === "full_body"
+                          ? "Go back to the photo from your latest scan, or the sample"
+                          : "Go back to the sample photo"
+                      }
+                    >
+                      Remove
+                    </button>
+                  )}
                 </div>
               </div>
             );

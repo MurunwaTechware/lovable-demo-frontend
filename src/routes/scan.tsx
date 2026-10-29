@@ -142,6 +142,8 @@ function ScanPage() {
     stopWatching.current = watchJob(jobId, {
       ready: () => {
         void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.profiles });
+        // A new finished scan can be the full body try-on photo (when the user hasn't added their own)
+        void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.tryOnPhotos });
         navigate({ to: "/measurements", search: { job: jobId } });
       },
       failed: (message) => {
