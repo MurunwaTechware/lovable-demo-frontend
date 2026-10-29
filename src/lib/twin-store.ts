@@ -3,9 +3,9 @@
 //   GET /me/measurement-profiles      → MeasurementProfile[] (without measurementsCm and warnings)
 //   GET /measurements_data/{job_id}   → measurementsCm, warnings (the profile's measurement.json)
 //   GET /me/saved-tryons              → SavedTryOn[]
-//   try-on photos                     → MOCK: not in the backend yet (see TryOnPhotos)
+//   GET /me/tryon-photos              → TryOnPhotos (PUT and DELETE to change them)
 
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import personImg from "@/assets/tryon-person.jpg";
 import closeUpImg from "@/assets/tryon-closeup.jpg";
@@ -13,9 +13,13 @@ import {
   getMeasurement,
   getProfiles,
   getSavedTryOns,
+  getTryOnPhotos,
+  removeTryOnPhoto,
+  replaceTryOnPhoto,
   type BackendMeasurement,
   type BackendProfile,
   type BackendSavedTryOn,
+  type BackendTryOnPhotos,
 } from "@/lib/api";
 
 export type MeasurementKey =
@@ -65,9 +69,14 @@ export const SCAN_VIEW_LABELS: Record<ScanView, string> = {
 // The person photos try-ons use unless the user picks others. Two are recommended: a full body photo for
 // clothes and shoes, and a close-up so hats, sunglasses and earrings are big enough to see. The try-on uses
 // the close-up when every item is worn on the head or neck, and the full body photo otherwise.
-export type TryOnPhoto = { src: string; updated: string };
+// Each user's are their own (kept by the backend). Where they have none, a sample photo stands in:
+//   "uploaded"  one they added on the twin page
+//   "scan"      full body only: the front photo of their latest finished scan
+//   "sample"    the app's sample photo, the same for everyone and never changed by anyone
+export type TryOnPhotoSource = "uploaded" | "scan" | "sample";
+export type TryOnPhoto = { src: string; added: string | null; source: TryOnPhotoSource };
 export type TryOnPhotoKind = "full_body" | "close_up";
-export type TryOnPhotos = Record<TryOnPhotoKind, TryOnPhoto | null>; // null until they add one
+export type TryOnPhotos = Record<TryOnPhotoKind, TryOnPhoto>;
 
 export const TRY_ON_PHOTO_KINDS: TryOnPhotoKind[] = ["full_body", "close_up"];
 export const TRY_ON_PHOTO_LABELS: Record<TryOnPhotoKind, string> = {
@@ -203,6 +212,7 @@ function toSavedTryOn(t: BackendSavedTryOn): SavedTryOn {
 export const QUERY_KEYS = {
   profiles: ["measurement-profiles"] as const,
   savedTryOns: ["saved-tryons"] as const,
+  tryOnPhotos: ["tryon-photos"] as const,
   measurement: (jobId: string) => ["measurement", jobId] as const,
 };
 
@@ -216,11 +226,22 @@ const measurementQuery = (jobId: string) => ({
   staleTime: Infinity, // a profile's measurements never change once written
 });
 
-// MOCK until the backend can store them. Sample photos from the backend's test-images folder (ChatGPT).
-const TRY_ON_PHOTOS: TryOnPhotos = {
-  full_body: { src: personImg, updated: "2026-10-12T09:20:00" },
-  close_up: { src: closeUpImg, updated: "2026-10-12T09:21:00" },
+// Stand-ins for photos a user hasn't added: part of the app itself, so nobody can change them for others.
+// Sample photos from the backend's test-images folder (ChatGPT).
+const SAMPLE_PHOTOS: TryOnPhotos = {
+  full_body: { src: personImg, added: null, source: "sample" },
+  close_up: { src: closeUpImg, added: null, source: "sample" },
 };
+
+function toTryOnPhotos(p: BackendTryOnPhotos): TryOnPhotos {
+  const one = (kind: TryOnPhotoKind): TryOnPhoto => {
+    const photo = p[kind];
+    return photo
+      ? { src: photo.url, added: photo.added, source: photo.source }
+      : SAMPLE_PHOTOS[kind];
+  };
+  return { full_body: one("full_body"), close_up: one("close_up") };
+}
 
 const errorMessage = (e: unknown) => (e instanceof Error ? e.message : null);
 
@@ -245,7 +266,6 @@ export function useTwin() {
     profiles,
     latest: profiles.find((p) => p.status === "ready") ?? null,
     tryOns: (tryOnsQ.data ?? []).map(toSavedTryOn),
-    tryOnPhotos: TRY_ON_PHOTOS,
     isLoading: profilesQ.isLoading || tryOnsQ.isLoading || measurements.some((q) => q.isLoading),
     error: errorMessage(
       profilesQ.error ?? tryOnsQ.error ?? measurements.find((q) => q.error)?.error,
@@ -283,9 +303,29 @@ export function useMeasurementProfile(jobId?: string) {
   };
 }
 
-/** The user's saved try-on photos (MOCK, see TRY_ON_PHOTOS) */
+/**
+ * The user's try-on photos, with samples where they have none. photos is null until loaded (or if
+ * loading failed), so nothing starts a try-on with a sample by mistake while the real ones are on the way.
+ */
 export function useTryOnPhotos() {
-  return TRY_ON_PHOTOS;
+  const q = useQuery({
+    queryKey: QUERY_KEYS.tryOnPhotos,
+    queryFn: getTryOnPhotos,
+    retry: RETRY,
+    select: toTryOnPhotos,
+  });
+  return { photos: q.data ?? null, isLoading: q.isLoading, error: errorMessage(q.error) };
+}
+
+/** Replace one of the user's try-on photos, or remove it (back to the scan photo or the sample). */
+export function useChangeTryOnPhoto() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ kind, file }: { kind: TryOnPhotoKind; file: File | null }) =>
+      file ? replaceTryOnPhoto(kind, file) : removeTryOnPhoto(kind),
+    // The answer is both photos as they now are, so no need to fetch them again
+    onSuccess: (photos) => queryClient.setQueryData(QUERY_KEYS.tryOnPhotos, photos),
+  });
 }
 
 export function feetInches(cm: number) {
