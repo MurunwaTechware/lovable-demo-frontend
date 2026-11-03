@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Check, KeyRound, Mail, Pencil, Trash2 } from "lucide-react";
+import { Check, KeyRound, Mail, Pencil, PencilRuler, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Field, Panel, buttonClass, inputClass } from "@/components/AccountUI";
@@ -34,9 +34,26 @@ function AccountDetails() {
   return (
     <div className="space-y-6">
       <PersonalInfo account={account} />
+      <BodySetup />
       <SignInSecurity account={account} />
       <DeleteAccount email={account.email} />
     </div>
+  );
+}
+
+// ── Body setup ────────────────────────────────────────────────────────────────
+
+function BodySetup() {
+  return (
+    <Panel
+      title="Body setup"
+      description="The build, height and sizes your Digital Twin starts from. Change them any time."
+      action={
+        <Link to="/body-setup" className={buttonClass.secondary}>
+          <PencilRuler className="h-4 w-4" /> Redo body setup
+        </Link>
+      }
+    />
   );
 }
 

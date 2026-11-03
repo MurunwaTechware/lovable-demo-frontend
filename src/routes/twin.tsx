@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import twinImg from "@/assets/twin.jpg";
+import { BaseBodyCard } from "@/components/BaseBodyCard";
 import { Nav } from "@/components/Nav";
 import {
   Dialog,
@@ -106,6 +107,7 @@ function TwinPage() {
         {/* In-page sections */}
         <nav className="mt-8 flex flex-wrap gap-2 text-xs font-medium" aria-label="Sections">
           {[
+            ["#base-body", "Base body"],
             ["#measurements", "Latest measurements"],
             ["#tryon-photo", "Try-on photos"],
             ["#tryons", `Saved try-ons (${tryOns.length})`],
@@ -141,8 +143,18 @@ function TwinPage() {
           </p>
         )}
 
+        {/* The base body from the onboarding questionnaire */}
+        <section id="base-body" className="mt-10 scroll-mt-24">
+          <SectionTitle
+            icon={<UserRound className="h-4 w-4" />}
+            title="Your base body"
+            hint="Where your twin starts: your build, height and the sizes you buy."
+          />
+          <BaseBodyCard />
+        </section>
+
         {/* Latest measurements */}
-        <section id="measurements" className="mt-10 scroll-mt-24">
+        <section id="measurements" className="mt-20 scroll-mt-24">
           <SectionTitle icon={<Ruler className="h-4 w-4" />} title="Latest measurements" />
           {latest ? (
             <LatestCard profile={latest} previous={previous} />

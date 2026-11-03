@@ -1,16 +1,22 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Shield, Lock, UserCircle2, ShieldCheck, ArrowRight, ArrowLeft, Check,
-  Play, Sparkles, ScanLine, IdCard, Users, Mail, PartyPopper,
+  Play, Sparkles, ScanLine, IdCard, Users, Mail, PartyPopper, Loader2,
 } from "lucide-react";
+import { BodyQuestionnaire } from "@/components/BodyQuestionnaire";
 import { Nav } from "@/components/Nav";
+import { useBodyProfile } from "@/lib/body-profile";
 import { trustStore, useTrust } from "@/lib/trust-store";
 import heroImg from "@/assets/hero.jpg";
 import twinImg from "@/assets/twin.jpg";
 import scanVideo from "@/assets/scan.mp4.asset.json";
 
 export const Route = createFileRoute("/onboarding")({
+  // ?from=start shows the whole flow again, even after it's been completed
+  validateSearch: (search: Record<string, unknown>): { from?: "start" } => ({
+    from: search.from === "start" ? "start" : undefined,
+  }),
   component: Onboarding,
   head: () => ({
     meta: [
@@ -21,12 +27,20 @@ export const Route = createFileRoute("/onboarding")({
   }),
 });
 
-const STEPS = ["Welcome", "Privacy", "How it works", "Age", "Terms", "Done"] as const;
+const STEPS = ["Welcome", "Privacy", "How it works", "Age", "Terms", "Your body", "Done"] as const;
+const BODY_STEP = 5;
 
 function Onboarding() {
   const trust = useTrust();
   const navigate = useNavigate();
-  const [step, setStep] = useState(trust.onboarded ? 5 : 0);
+  const { from } = Route.useSearch();
+  const body = useBodyProfile();
+  // Back after finishing: straight to the body questions, with the saved answers, to change them
+  const [step, setStep] = useState(trust.onboarded && from !== "start" ? BODY_STEP : 0);
+  // The saved onboarding state is only read in the browser, after the first render
+  useEffect(() => {
+    if (trust.onboarded && from !== "start") setStep((s) => (s === 0 ? BODY_STEP : s));
+  }, [trust.onboarded, from]);
   const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
   const back = () => setStep((s) => Math.max(s - 1, 0));
 
@@ -55,11 +69,19 @@ function Onboarding() {
           {step === 2 && <HowItWorks onNext={next} onBack={back} />}
           {step === 3 && <AgeVerify onNext={next} onBack={back} />}
           {step === 4 && <Terms onNext={next} onBack={back} />}
-          {step === 5 && (
+          {step === BODY_STEP &&
+            (body.isLoading ? (
+              <div className="p-16 grid place-items-center text-muted-foreground">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+            ) : (
+              <BodyQuestionnaire initial={body.data} onDone={next} onBack={back} doneLabel="Save and continue" />
+            ))}
+          {step === 6 && (
             <Done
               onFinish={() => {
                 trustStore.completeOnboarding();
-                navigate({ to: "/" });
+                navigate({ to: "/twin" }); // where the base twin from the questionnaire now shows
               }}
             />
           )}

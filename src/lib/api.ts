@@ -159,3 +159,36 @@ export function replaceTryOnPhoto(kind: "full_body" | "close_up", photo: File) {
 /** DELETE /me/tryon-photos/{kind}: back to the scan photo or the sample. Answers with both photos. */
 export const removeTryOnPhoto = (kind: "full_body" | "close_up") =>
   request<BackendTryOnPhotos>(`/me/tryon-photos/${kind}`, { method: "DELETE" });
+
+// ── Body profile (the onboarding questionnaire) ───────────────────────────────
+
+export type MeasurementSource = "questionnaire" | "scan" | "manual";
+export type BackendMeasurementValue = {
+  value: number;
+  min?: number | null;
+  max?: number | null;
+  source: MeasurementSource;
+};
+export type BodyType = "slim" | "average" | "fuller";
+export type BodyProfileAnswers = {
+  sex: "female" | "male";
+  body_type: BodyType;
+  weight_kg: number | null;
+  waist: { system: "jeans_inches" | "dress_size"; size: number } | null;
+  bra: { band: number; band_system: "inches" | "cm"; cup: string } | null;
+  measurements: Partial<
+    Record<"height" | "waist" | "hip" | "bust" | "underbust", BackendMeasurementValue>
+  >;
+};
+export type BodyProfile = BodyProfileAnswers & { version: number; updated_at: string };
+
+/** GET /me/body-profile: null before the user has done the questionnaire */
+export const getBodyProfile = () =>
+  request<{ profile: BodyProfile | null }>("/me/body-profile").then((r) => r.profile);
+/** PUT /me/body-profile: replaces the user's answers (redoing the questionnaire starts clean) */
+export const saveBodyProfile = (answers: BodyProfileAnswers) =>
+  request<{ profile: BodyProfile }>("/me/body-profile", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(answers),
+  }).then((r) => r.profile);

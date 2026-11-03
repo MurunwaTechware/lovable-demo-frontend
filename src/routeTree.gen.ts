@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountRouteImport } from './routes/account'
+import { Route as BodySetupRouteImport } from './routes/body-setup'
 import { Route as CommunityRouteImport } from './routes/community'
 import { Route as JourneyRouteImport } from './routes/journey'
 import { Route as MeasurementsRouteImport } from './routes/measurements'
@@ -47,6 +48,11 @@ const IndexRoute = IndexRouteImport.update({
 const AccountRoute = AccountRouteImport.update({
   id: '/account',
   path: '/account',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BodySetupRoute = BodySetupRouteImport.update({
+  id: '/body-setup',
+  path: '/body-setup',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CommunityRoute = CommunityRouteImport.update({
@@ -188,6 +194,7 @@ const CommunityProfileIdRoute = CommunityProfileIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRouteWithChildren
+  '/body-setup': typeof BodySetupRoute
   '/community': typeof CommunityRouteWithChildren
   '/journey': typeof JourneyRoute
   '/measurements': typeof MeasurementsRoute
@@ -218,6 +225,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/body-setup': typeof BodySetupRoute
   '/journey': typeof JourneyRoute
   '/measurements': typeof MeasurementsRoute
   '/onboarding': typeof OnboardingRoute
@@ -249,6 +257,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/account': typeof AccountRouteWithChildren
+  '/body-setup': typeof BodySetupRoute
   '/community': typeof CommunityRouteWithChildren
   '/journey': typeof JourneyRoute
   '/measurements': typeof MeasurementsRoute
@@ -282,6 +291,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/account'
+    | '/body-setup'
     | '/community'
     | '/journey'
     | '/measurements'
@@ -312,6 +322,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/body-setup'
     | '/journey'
     | '/measurements'
     | '/onboarding'
@@ -342,6 +353,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/account'
+    | '/body-setup'
     | '/community'
     | '/journey'
     | '/measurements'
@@ -374,6 +386,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountRoute: typeof AccountRouteWithChildren
+  BodySetupRoute: typeof BodySetupRoute
   CommunityRoute: typeof CommunityRouteWithChildren
   JourneyRoute: typeof JourneyRoute
   MeasurementsRoute: typeof MeasurementsRoute
@@ -406,6 +419,13 @@ declare module '@tanstack/react-router' {
       path: '/account'
       fullPath: '/account'
       preLoaderRoute: typeof AccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/body-setup': {
+      id: '/body-setup'
+      path: '/body-setup'
+      fullPath: '/body-setup'
+      preLoaderRoute: typeof BodySetupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/community': {
@@ -644,6 +664,7 @@ const CommunityRouteWithChildren = CommunityRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRouteWithChildren,
+  BodySetupRoute: BodySetupRoute,
   CommunityRoute: CommunityRouteWithChildren,
   JourneyRoute: JourneyRoute,
   MeasurementsRoute: MeasurementsRoute,
