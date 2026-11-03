@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Sparkles, ScanLine, Heart, ShoppingBag, Send, Star, MapPin,
   Check, X, Play, ArrowRight, Ruler, Shirt, Bot, Plus, Minus,
-  Camera, Accessibility, PersonStanding, ChevronLeft, ChevronRight, CircleDot,
+  Accessibility, PersonStanding, ChevronLeft, ChevronRight,
 } from "lucide-react";
 
 import heroImg from "@/assets/hero.jpg";
@@ -40,8 +40,8 @@ function Home() {
   const [cartOpen, setCartOpen] = useState(false);
   const [brand, setBrand] = useState<string | null>(null);
   const [tryOn, setTryOn] = useState<Product | null>(null);
-  const [scanOpen, setScanOpen] = useState(false);
-  const [scanned, setScanned] = useState(() => {
+  // Set by the old demo scan on this page; the real scan is on /scan now
+  const [scanned] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("mannequin.scanned") === "1";
   });
@@ -131,11 +131,11 @@ function Home() {
               Mannequin AI scans you once, then shops across every retailer you love — predicting fit, styling outfits and booking tailors.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <button onClick={() => { setScanOpen(true); }}
+              <Link to="/scan"
                 className="group inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-6 py-3 text-sm font-medium shadow-[var(--shadow-lux)] hover:opacity-90">
                 <ScanLine className="h-4 w-4" /> Start body scan
                 <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
-              </button>
+              </Link>
               <Link to="/shop" className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-6 py-3 text-sm font-medium hover:bg-accent">
                 Explore marketplace
               </Link>
@@ -212,10 +212,10 @@ function Home() {
                 </li>
               ))}
             </ul>
-            <button onClick={() => { setScanOpen(true); }}
+            <Link to="/scan"
               className="mt-8 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-6 py-3 text-sm font-medium">
               <ScanLine className="h-4 w-4" /> Start scan now
-            </button>
+            </Link>
           </div>
 
           <TutorialStage
@@ -245,12 +245,12 @@ function Home() {
             {!scanned ? (
               <>
                 <p className="mt-5 text-muted-foreground max-w-lg">
-                  Your measurements appear here once your body scan is complete. Press <span className="text-foreground font-medium">Start scan</span> to open the camera and capture your three poses.
+                  Your measurements appear here once your body scan is complete. Press <span className="text-foreground font-medium">Start scan</span> to take or upload your three photos.
                 </p>
-                <button onClick={() => setScanOpen(true)}
+                <Link to="/scan"
                   className="mt-8 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-6 py-3 text-sm font-medium">
-                  <ScanLine className="h-4 w-4" /> Start camera scan
-                </button>
+                  <ScanLine className="h-4 w-4" /> Start scan
+                </Link>
               </>
             ) : (
               <>
@@ -370,10 +370,10 @@ function Home() {
         <SectionKicker className="justify-center">Get started</SectionKicker>
         <h2 className="mt-3 text-4xl md:text-6xl max-w-3xl mx-auto">Your <span className="italic">Digital Body Twin</span> is 90 seconds away.</h2>
         <p className="mt-5 text-muted-foreground max-w-xl mx-auto">Free forever. No measuring tape. No returns.</p>
-        <button onClick={() => { setScanOpen(true); }}
+        <Link to="/scan"
           className="mt-8 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-8 py-4 text-sm font-medium shadow-[var(--shadow-lux)]">
           <ScanLine className="h-4 w-4" /> Start your scan
-        </button>
+        </Link>
       </section>
 
       <footer className="border-t border-border">
@@ -383,21 +383,6 @@ function Home() {
         </div>
       </footer>
 
-      {scanOpen && (
-        <ScanCameraModal
-          initialSeated={seatedMode}
-          measurements={measurements}
-          onClose={() => setScanOpen(false)}
-          onFinished={() => {
-            setScanOpen(false);
-            setScanned(true);
-            try { window.localStorage.setItem("mannequin.scanned", "1"); } catch {}
-            requestAnimationFrame(() => {
-              document.getElementById("twin")?.scrollIntoView({ behavior: "smooth" });
-            });
-          }}
-        />
-      )}
 
       {tryOn && (
         <Modal onClose={() => setTryOn(null)} wide>
@@ -857,238 +842,3 @@ function SeatedPose({ pose }: { pose: number }) {
   );
 }
 
-/* ─────────────── Camera scan modal ─────────────── */
-
-function ScanCameraModal({
-  initialSeated, measurements, onClose, onFinished,
-}: {
-  initialSeated: boolean;
-  measurements: { height: number; chest: number; waist: number; hip: number; inseam: number };
-  onClose: () => void;
-  onFinished: () => void;
-}) {
-  const [mode, setMode] = useState<PoseMode>(initialSeated ? "seated" : "standing");
-  const [pose, setPose] = useState(0);
-  const [captured, setCaptured] = useState<boolean[]>([false, false, false]);
-  const [phase, setPhase] = useState<"camera" | "processing" | "done">("camera");
-  const [progress, setProgress] = useState(0);
-  const [countdown, setCountdown] = useState<number | null>(null);
-  const [camError, setCamError] = useState<string | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 1080 }, height: { ideal: 1440 } },
-          audio: false,
-        });
-        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
-        streamRef.current = stream;
-        if (videoRef.current) videoRef.current.srcObject = stream;
-      } catch (e: unknown) {
-        setCamError(e instanceof Error ? e.message : "Camera unavailable");
-      }
-    })();
-    return () => {
-      cancelled = true;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (phase !== "processing") return;
-    setProgress(0);
-    const iv = setInterval(() => {
-      setProgress((p) => {
-        if (p >= 100) { clearInterval(iv); setPhase("done"); return 100; }
-        return p + 2;
-      });
-    }, 40);
-    return () => clearInterval(iv);
-  }, [phase]);
-
-  const capture = () => {
-    if (countdown !== null) return;
-    setCountdown(3);
-    let n = 3;
-    const iv = setInterval(() => {
-      n -= 1;
-      if (n <= 0) {
-        clearInterval(iv);
-        setCountdown(null);
-        setCaptured((prev) => {
-          const nx = [...prev];
-          nx[pose] = true;
-          const allDone = nx.every(Boolean);
-          if (allDone) setPhase("processing");
-          else setPose((p) => (nx[(p + 1) % 3] ? p : (p + 1) % 3));
-          return nx;
-        });
-      } else setCountdown(n);
-    }, 700);
-  };
-
-  const poseInfo = POSES[mode][pose];
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-0 sm:p-3 md:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-4xl sm:rounded-3xl rounded-none overflow-hidden bg-card border border-border shadow-[var(--shadow-lux)] animate-fade-up relative my-0 sm:my-4 max-h-[100dvh] sm:max-h-[95vh] flex flex-col">
-        <button onClick={onClose} className="absolute top-3 right-3 z-30 h-9 w-9 grid place-items-center rounded-full bg-black/40 text-white hover:bg-black/60">
-          <X className="h-4 w-4" />
-        </button>
-
-        {phase === "camera" && (
-          <div className="grid md:grid-cols-[1.4fr_1fr] overflow-y-auto">
-            {/* Camera viewport */}
-            <div className="relative w-full aspect-[3/4] sm:aspect-[4/5] md:aspect-auto md:min-h-[560px] max-h-[50vh] md:max-h-none bg-black overflow-hidden flex items-center justify-center">
-              {!camError ? (
-                <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 h-full w-full object-cover object-center scale-x-[-1]" />
-              ) : (
-                <div className="absolute inset-0 grid place-items-center text-white/70 text-sm p-6 text-center">
-                  <div>
-                    <Camera className="h-8 w-8 mx-auto mb-3 opacity-70" />
-                    <div className="font-medium mb-1">Camera unavailable</div>
-                    <div className="text-xs opacity-80">Allow camera access to complete the scan, or continue with a simulated demo.</div>
-                  </div>
-                </div>
-              )}
-              {/* Pose overlay guide */}
-              <div className="absolute inset-0 grid place-items-center pointer-events-none">
-                <div className="h-[85%] aspect-[3/4] relative">
-                  <div className="absolute inset-0 rounded-3xl border-2 border-dashed border-[color:var(--plum)]/70 animate-pulse" />
-                  <div className="absolute inset-0 grid place-items-center opacity-70">
-                    <svg viewBox="0 0 120 160" className="h-full w-auto text-white/90">
-                      {mode === "standing" ? <StandingPose pose={pose} /> : <SeatedPose pose={pose} />}
-                    </svg>
-                  </div>
-                </div>
-              </div>
-              {/* Scan sweep line */}
-              <div className="absolute inset-x-0 h-16 bg-gradient-to-b from-cyan-300/50 to-transparent animate-scan-sweep pointer-events-none" />
-              {/* Countdown */}
-              {countdown !== null && (
-                <div className="absolute inset-0 grid place-items-center bg-black/40">
-                  <div className="font-display text-white text-8xl">{countdown}</div>
-                </div>
-              )}
-              {/* Top chip */}
-              <div className="absolute top-3 left-3 flex items-center gap-2">
-                <div className="glass rounded-full px-3 py-1.5 text-[11px] font-medium text-white bg-black/50">
-                  <CircleDot className="h-3 w-3 inline mr-1 text-red-400 animate-pulse" /> Live camera
-                </div>
-                <div className="glass rounded-full px-3 py-1.5 text-[11px] font-medium text-white bg-black/50">
-                  {mode === "seated" ? "Seated mode" : "Standing mode"}
-                </div>
-              </div>
-            </div>
-
-            {/* Side panel */}
-            <div className="p-4 sm:p-6 md:p-7 flex flex-col">
-              <div className="text-[11px] uppercase tracking-[0.24em] text-[color:var(--plum)]">Body scan</div>
-              <h3 className="mt-2 font-display text-xl sm:text-2xl">Pose {pose + 1} · {poseInfo.label}</h3>
-              <p className="mt-1 text-sm text-muted-foreground">{poseInfo.sub}. {poseInfo.tip}</p>
-
-              {/* Mode toggle */}
-              <div className="mt-4 sm:mt-5 flex items-center gap-1 rounded-full bg-secondary p-1 text-[11px] sm:text-xs w-full sm:w-fit">
-                <button
-                  onClick={() => { setMode("standing"); setPose(0); setCaptured([false, false, false]); }}
-                  className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 rounded-full px-2.5 sm:px-3 py-1.5 transition ${mode === "standing" ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"}`}
-                >
-                  <PersonStanding className="h-3.5 w-3.5" /> Standing
-                </button>
-                <button
-                  onClick={() => { setMode("seated"); setPose(0); setCaptured([false, false, false]); }}
-                  className={`flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 rounded-full px-2.5 sm:px-3 py-1.5 transition ${mode === "seated" ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"}`}
-                >
-                  <Accessibility className="h-3.5 w-3.5" /> Seated
-                </button>
-              </div>
-
-              {/* Pose progress */}
-              <div className="mt-5 space-y-2">
-                {POSES[mode].map((p, i) => (
-                  <button
-                    key={p.label}
-                    onClick={() => setPose(i)}
-                    className={`w-full flex items-center gap-3 rounded-xl border p-3 text-left transition ${
-                      i === pose ? "border-[color:var(--plum)] bg-[color:var(--plum)]/5" : "border-border hover:bg-accent"
-                    }`}
-                  >
-                    <span className={`h-6 w-6 grid place-items-center rounded-full text-[11px] font-medium ${
-                      captured[i] ? "bg-emerald-500 text-white" : i === pose ? "bg-[color:var(--plum)] text-white" : "bg-secondary text-muted-foreground"
-                    }`}>
-                      {captured[i] ? <Check className="h-3.5 w-3.5" /> : i + 1}
-                    </span>
-                    <div className="flex-1">
-                      <div className="text-sm font-medium">{p.label}</div>
-                      <div className="text-[11px] text-muted-foreground">{p.sub}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              <div className="mt-6 md:mt-auto pt-4 sm:pt-6 flex gap-2">
-                <button
-                  onClick={capture}
-                  disabled={captured[pose] || countdown !== null}
-                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-full bg-primary text-primary-foreground px-5 py-3 text-sm font-medium disabled:opacity-40"
-                >
-                  <Camera className="h-4 w-4" /> {captured[pose] ? "Captured" : "Capture pose"}
-                </button>
-                {camError && (
-                  <button
-                    onClick={() => { setCaptured([true, true, true]); setPhase("processing"); }}
-                    className="rounded-full border border-border px-4 py-3 text-xs"
-                  >
-                    Skip
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {phase === "processing" && (
-          <div className="p-8 text-center">
-            <h3 className="font-display text-3xl">Building your twin…</h3>
-            <p className="mt-2 text-muted-foreground text-sm">Analyzing 42 body landmarks across 3 poses.</p>
-            <div className="mt-6 relative mx-auto rounded-2xl overflow-hidden aspect-[3/4] max-w-xs" style={{ background: "var(--gradient-plum)" }}>
-              <img src={twinImg} alt="" className="h-full w-full object-cover mix-blend-screen opacity-90" />
-              <div className="absolute inset-x-0 h-16 bg-gradient-to-b from-cyan-300/60 to-transparent animate-scan-sweep" />
-            </div>
-            <div className="mt-6 h-2 rounded-full bg-secondary overflow-hidden max-w-sm mx-auto">
-              <div className="h-full bg-[color:var(--plum)] transition-all" style={{ width: `${progress}%` }} />
-            </div>
-            <div className="mt-2 text-xs text-muted-foreground">{progress}%</div>
-          </div>
-        )}
-
-        {phase === "done" && (
-          <div className="p-8 text-center">
-            <div className="mx-auto h-14 w-14 grid place-items-center rounded-full bg-emerald-500/15 text-emerald-600">
-              <Check className="h-6 w-6" />
-            </div>
-            <h3 className="mt-4 font-display text-3xl">Your twin is ready.</h3>
-            <p className="mt-2 text-muted-foreground text-sm">96% fit confidence · 42 landmarks · {mode === "seated" ? "Seated" : "Standing"} scan.</p>
-            <div className="mt-6 grid grid-cols-3 gap-3 text-left max-w-md mx-auto">
-              {[["Height", `${measurements.height} cm`], ["Chest", `${measurements.chest} cm`], ["Waist", `${measurements.waist} cm`]].map(([k, v]) => (
-                <div key={k} className="rounded-xl border border-border p-3">
-                  <div className="text-[11px] text-muted-foreground">{k}</div>
-                  <div className="font-display text-lg">{v}</div>
-                </div>
-              ))}
-            </div>
-            <button onClick={onFinished} className="mt-6 rounded-full bg-primary text-primary-foreground px-6 py-3 text-sm">
-              View my Digital Twin
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}

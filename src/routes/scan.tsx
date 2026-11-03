@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Camera, Check, ImagePlus, Loader2, X, ArrowRight } from "lucide-react";
 
 import { Nav } from "@/components/Nav";
+import { ScanCamera } from "@/components/ScanCamera";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { uploadScan, watchJob } from "@/lib/api";
@@ -51,6 +52,7 @@ function ScanPage() {
   const [age, setAge] = useState("");
   const [errors, setErrors] = useState<Errors>({});
   const [measuring, setMeasuring] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   const heightCm = Math.round((feet * 12 + inches) * 2.54);
 
@@ -163,8 +165,8 @@ function ScanPage() {
         </div>
         <h1 className="mt-3 font-display text-4xl md:text-5xl">Upload your photos</h1>
         <p className="mt-3 max-w-2xl text-muted-foreground">
-          Provide three photos of yourself: front, left side and right side. Then enter your
-          details.
+          Provide three photos of yourself: front, left side and right side. Take them with your
+          camera here, or upload them. Then enter your details.
         </p>
 
         <form
@@ -173,7 +175,16 @@ function ScanPage() {
           className="mt-10 rounded-3xl border border-border bg-card p-6 md:p-10 shadow-[var(--shadow-card)]"
         >
           {/* Photos */}
-          <h2 className="font-display text-2xl">Photos</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-display text-2xl">Photos</h2>
+            <button
+              type="button"
+              onClick={() => setCameraOpen(true)}
+              className="inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-5 py-2.5 text-sm font-medium"
+            >
+              <Camera className="h-4 w-4" /> Take photos with your camera
+            </button>
+          </div>
           <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
             {[
               "Whole body in frame, head to feet",
@@ -292,6 +303,16 @@ function ScanPage() {
           </p>
         </form>
       </main>
+
+      {cameraOpen && (
+        <ScanCamera
+          photos={Object.fromEntries(
+            VIEWS.flatMap((v) => (photos[v] ? [[v, photos[v]!.url]] : [])),
+          )}
+          onCapture={setPhoto}
+          onClose={() => setCameraOpen(false)}
+        />
+      )}
 
       {measuring && (
         <div
