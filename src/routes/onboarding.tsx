@@ -27,8 +27,10 @@ export const Route = createFileRoute("/onboarding")({
   }),
 });
 
-const STEPS = ["Welcome", "Privacy", "How it works", "Age", "Terms", "Your body", "Done"] as const;
-const BODY_STEP = 5;
+// "How it works" (the scan tutorial) is commented out while the onboarding flow is being decided.
+// To bring it back: restore it here after "Privacy", set BODY_STEP to 5, and undo the step numbers below.
+const STEPS = ["Welcome", "Privacy", /* "How it works", */ "Age", "Terms", "Your body", "Done"] as const;
+const BODY_STEP = 4;
 
 function Onboarding() {
   const trust = useTrust();
@@ -66,9 +68,9 @@ function Onboarding() {
         <div className="rounded-[2rem] border border-border bg-card shadow-[var(--shadow-card)] overflow-hidden animate-fade-up">
           {step === 0 && <Welcome onNext={next} />}
           {step === 1 && <Privacy onNext={next} onBack={back} />}
-          {step === 2 && <HowItWorks onNext={next} onBack={back} />}
-          {step === 3 && <AgeVerify onNext={next} onBack={back} />}
-          {step === 4 && <Terms onNext={next} onBack={back} />}
+          {/* {step === 2 && <HowItWorks onNext={next} onBack={back} />} */}
+          {step === 2 && <AgeVerify onNext={next} onBack={back} />}
+          {step === 3 && <Terms onNext={next} onBack={back} />}
           {step === BODY_STEP &&
             (body.isLoading ? (
               <div className="p-16 grid place-items-center text-muted-foreground">
@@ -77,7 +79,7 @@ function Onboarding() {
             ) : (
               <BodyQuestionnaire initial={body.data} onDone={next} onBack={back} doneLabel="Save and continue" />
             ))}
-          {step === 6 && (
+          {step === 5 && (
             <Done
               onFinish={() => {
                 trustStore.completeOnboarding();
