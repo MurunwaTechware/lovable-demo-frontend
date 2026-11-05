@@ -28,7 +28,7 @@ function BodySetupPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Nav />
-      <main className="mx-auto max-w-5xl px-6 pt-24 pb-16">
+      <main className="mx-auto max-w-6xl px-6 pt-24 pb-16">
         <div className="mb-6 flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="font-display text-3xl md:text-4xl">
             {body.data ? "Change your body setup" : "Set up your body"}
@@ -41,7 +41,8 @@ function BodySetupPage() {
             See the whole onboarding again
           </Link>
         </div>
-        <div className="rounded-[2rem] border border-border bg-card shadow-[var(--shadow-card)] overflow-hidden">
+        {/* overflow-clip, not overflow-hidden, so the mesh can stay in view (sticky) */}
+        <div className="rounded-[2rem] border border-border bg-card shadow-[var(--shadow-card)] overflow-clip">
           {body.isLoading ? (
             <div className="p-16 grid place-items-center text-muted-foreground">
               <Loader2 className="h-6 w-6 animate-spin" />

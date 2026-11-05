@@ -248,8 +248,10 @@ export function BodyQuestionnaire({
 
   return (
     <div className="grid md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-      {/* The base body, as it is with the answers so far */}
-      <div className="relative bg-secondary/40 min-h-[320px] md:min-h-[600px]">
+      {/* The base body, as it is with the answers so far. A fixed height (kept in view while the
+          measurements scroll past) rather than the column's, which grows with "More measurements" and
+          would make the camera zoom in on it. */}
+      <div className="relative bg-secondary/40 h-[360px] md:sticky md:top-20 md:self-start md:h-[calc(100svh-7rem)] md:min-h-[520px] md:max-h-[760px]">
         <BodyMesh
           key={mesh.model}
           model={mesh.model}

@@ -50,7 +50,8 @@ function Onboarding() {
     <div className="min-h-screen bg-background text-foreground">
       <Nav />
       <div className="pt-16" />
-      <div className="mx-auto max-w-4xl px-6 py-12">
+      {/* Wider for the body step: the mesh and the measurements side by side */}
+      <div className={`mx-auto px-6 py-12 ${step === BODY_STEP ? "max-w-6xl" : "max-w-4xl"}`}>
         {/* progress */}
         <div className="mb-10">
           <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.2em] text-muted-foreground mb-3">
@@ -65,7 +66,8 @@ function Onboarding() {
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-border bg-card shadow-[var(--shadow-card)] overflow-hidden animate-fade-up">
+        {/* overflow-clip, not overflow-hidden, so the body step's mesh can stay in view (sticky) */}
+        <div className="rounded-[2rem] border border-border bg-card shadow-[var(--shadow-card)] overflow-clip animate-fade-up">
           {step === 0 && <Welcome onNext={next} />}
           {step === 1 && <Privacy onNext={next} onBack={back} />}
           {/* {step === 2 && <HowItWorks onNext={next} onBack={back} />} */}
