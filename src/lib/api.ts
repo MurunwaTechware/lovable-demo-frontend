@@ -162,7 +162,25 @@ export const removeTryOnPhoto = (kind: "full_body" | "close_up") =>
 
 // ── Body profile (the onboarding questionnaire) ───────────────────────────────
 
-export type MeasurementSource = "questionnaire" | "scan" | "manual";
+export type MeasurementSource = "base" | "questionnaire" | "scan" | "manual";
+export type MeasurementKey =
+  | "height"
+  | "bust"
+  | "underbust"
+  | "waist"
+  | "hip"
+  | "inside_leg"
+  | "head"
+  | "neck"
+  | "shoulder_breadth"
+  | "arm_length"
+  | "bicep"
+  | "forearm"
+  | "wrist"
+  | "shoulder_to_crotch"
+  | "thigh"
+  | "calf"
+  | "ankle";
 export type BackendMeasurementValue = {
   value: number;
   min?: number | null;
@@ -176,9 +194,7 @@ export type BodyProfileAnswers = {
   weight_kg: number | null;
   waist: { system: "jeans_inches" | "dress_size"; size: number } | null;
   bra: { band: number; band_system: "inches" | "cm"; cup: string } | null;
-  measurements: Partial<
-    Record<"height" | "waist" | "hip" | "bust" | "underbust", BackendMeasurementValue>
-  >;
+  measurements: Partial<Record<MeasurementKey, BackendMeasurementValue>>;
 };
 export type BodyProfile = BodyProfileAnswers & { version: number; updated_at: string };
 

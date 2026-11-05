@@ -1,10 +1,13 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Loader2, PencilRuler, Ruler } from "lucide-react";
+import { ChevronDown, Loader2, PencilRuler, Ruler } from "lucide-react";
 
 import { BodyMesh } from "@/components/BodyMesh";
 import {
   BODY_TYPES,
-  MEASUREMENT_NAMES,
+  MORE_MEASUREMENTS,
+  measurementKeys,
+  measurementName,
   SEXES,
   SOURCE_LABELS,
   meshFor,
@@ -12,9 +15,10 @@ import {
 } from "@/lib/body-profile";
 
 // The base body from the onboarding questionnaire, on the twin page: the mesh, the starting
-// measurements, and a way to redo the questionnaire.
+// measurements (the main ones, and the rest under "More measurements"), and a way to redo the questionnaire.
 export function BaseBodyCard() {
   const body = useBodyProfile();
+  const [showMore, setShowMore] = useState(false);
 
   if (body.isLoading) {
     return (
@@ -53,7 +57,9 @@ export function BaseBodyCard() {
   }
 
   const mesh = meshFor(profile.sex, profile.body_type);
-  const names = Object.keys(MEASUREMENT_NAMES) as (keyof typeof MEASUREMENT_NAMES)[];
+  const names = measurementKeys(profile.sex);
+  // Profiles saved before these were added have only the main measurements
+  const hasMore = MORE_MEASUREMENTS.some((g) => g.keys.some((k) => profile.measurements[k]));
   return (
     <div className="mt-6 grid md:grid-cols-[320px_1fr] gap-6 rounded-3xl border border-border bg-card p-5 shadow-[var(--shadow-card)]">
       <div className="relative aspect-[3/4] rounded-2xl bg-secondary/40 overflow-hidden">
@@ -85,7 +91,7 @@ export function BaseBodyCard() {
                 <li key={k} className="rounded-2xl border border-border p-3">
                   <div className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
                     <Ruler className="h-3.5 w-3.5 text-[color:var(--plum)]" />{" "}
-                    {MEASUREMENT_NAMES[k]}
+                    {measurementName(k, profile.sex)}
                   </div>
                   <div className="mt-1 font-display text-lg tabular-nums">
                     {m.min != null ? `${m.min}–${m.max} cm` : `${m.value} cm`}
@@ -95,6 +101,58 @@ export function BaseBodyCard() {
               );
             })}
         </ul>
+        <div className="mt-3 rounded-2xl border border-border">
+          <button
+            type="button"
+            onClick={() => setShowMore((v) => !v)}
+            aria-expanded={showMore}
+            aria-controls="twin-more-measurements"
+            className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm"
+          >
+            <span className="font-medium">More measurements</span>
+            <ChevronDown className={`h-4 w-4 transition ${showMore ? "rotate-180" : ""}`} />
+          </button>
+          {showMore && (
+            <div id="twin-more-measurements" className="border-t border-border px-3 pb-3">
+              {MORE_MEASUREMENTS.map((group) => {
+                const keys = group.keys.filter((k) => profile.measurements[k]);
+                if (!keys.length) return null;
+                return (
+                  <div key={group.title}>
+                    <div className="pt-3 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                      {group.title}
+                    </div>
+                    <dl className="mt-1 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
+                      {keys.map((k) => {
+                        const m = profile.measurements[k]!;
+                        return (
+                          <div key={k} className="min-w-0">
+                            <dt className="text-xs text-muted-foreground">
+                              {measurementName(k, profile.sex)}
+                            </dt>
+                            <dd className="text-sm tabular-nums">
+                              {m.value} cm
+                              {m.source !== "base" && (
+                                <span className="block text-[11px] text-muted-foreground">
+                                  {SOURCE_LABELS[m.source]}
+                                </span>
+                              )}
+                            </dd>
+                          </div>
+                        );
+                      })}
+                    </dl>
+                  </div>
+                );
+              })}
+              <p className="pt-3 text-[11px] text-muted-foreground">
+                {hasMore
+                  ? "From your base body unless marked."
+                  : "Redo body setup to add them: they come from your base body."}
+              </p>
+            </div>
+          )}
+        </div>
         <div className="mt-auto pt-5">
           <Link
             to="/body-setup"
