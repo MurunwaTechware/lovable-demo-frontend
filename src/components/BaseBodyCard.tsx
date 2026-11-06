@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ChevronDown, Loader2, PencilRuler, Ruler } from "lucide-react";
+import {
+  ChevronDown,
+  Loader2,
+  PencilRuler,
+  Ruler,
+  ScanLine,
+  SlidersHorizontal,
+} from "lucide-react";
 
 import { BodyMesh } from "@/components/BodyMesh";
 import {
@@ -14,8 +21,9 @@ import {
   useBodyProfile,
 } from "@/lib/body-profile";
 
-// The base body from the onboarding questionnaire, on the twin page: the mesh, the starting
-// measurements (the main ones, and the rest under "More measurements"), and a way to redo the questionnaire.
+// The user's twin on the twin page: the mesh, its measurements (the main ones, and the rest under "More
+// measurements"), and the ways to change it: Edit (the mesh viewer, /twin/edit), a new scan, or the
+// body questionnaire. Before there's a twin: the two ways to set one up.
 export function BaseBodyCard() {
   const body = useBodyProfile();
   const [showMore, setShowMore] = useState(false);
@@ -41,17 +49,25 @@ export function BaseBodyCard() {
   const profile = body.data;
   if (!profile) {
     return (
-      <div className="mt-6 rounded-3xl border border-dashed border-border bg-card p-8 text-center">
-        <p className="font-display text-xl">Start your twin with a few questions</p>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Your build, height and the sizes you buy give your twin its starting shape.
+      <div className="mt-6 rounded-3xl border border-dashed border-border bg-card p-8">
+        <p className="font-display text-xl text-center">Set up your twin</p>
+        <p className="mt-2 text-sm text-muted-foreground text-center">
+          Two ways to give it your shape. You can switch, or fine-tune it, at any time.
         </p>
-        <Link
-          to="/body-setup"
-          className="mt-5 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-5 py-2.5 text-sm font-medium"
-        >
-          <PencilRuler className="h-4 w-4" /> Set up your body
-        </Link>
+        <div className="mt-6 grid sm:grid-cols-2 gap-3 max-w-2xl mx-auto">
+          <SetupOption
+            to="/scan"
+            icon={<ScanLine className="h-5 w-5" />}
+            title="AI scan"
+            body="Three photos and your details. We measure you from them."
+          />
+          <SetupOption
+            to="/body-setup"
+            icon={<PencilRuler className="h-5 w-5" />}
+            title="A few questions"
+            body="Pick the body closest to yours and the sizes you buy."
+          />
+        </div>
       </div>
     );
   }
@@ -76,6 +92,9 @@ export function BaseBodyCard() {
             {SEXES.find((s) => s.id === profile.sex)?.label} ·{" "}
             {BODY_TYPES.find((t) => t.id === profile.body_type)?.label} build
           </h3>
+          <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground">
+            {profile.scan_job ? "From your scan" : "From your answers"}
+          </span>
           {profile.weight_kg && (
             <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground">
               {profile.weight_kg} kg
@@ -148,20 +167,57 @@ export function BaseBodyCard() {
               <p className="pt-3 text-[11px] text-muted-foreground">
                 {hasMore
                   ? "From your base body unless marked."
-                  : "Redo body setup to add them: they come from your base body."}
+                  : "Edit your measurements to add them: they come from your base body."}
               </p>
             </div>
           )}
         </div>
-        <div className="mt-auto pt-5">
+        <div className="mt-auto pt-5 flex flex-wrap gap-2">
+          <Link
+            to="/twin/edit"
+            className="inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-4 py-2 text-sm font-medium"
+          >
+            <SlidersHorizontal className="h-4 w-4" /> Edit measurements
+          </Link>
+          <Link
+            to="/scan"
+            className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+          >
+            <ScanLine className="h-4 w-4" /> New scan
+          </Link>
           <Link
             to="/body-setup"
             className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
           >
-            <PencilRuler className="h-4 w-4" /> Redo body setup
+            <PencilRuler className="h-4 w-4" /> Redo the questions
           </Link>
         </div>
       </div>
     </div>
+  );
+}
+
+function SetupOption({
+  to,
+  icon,
+  title,
+  body,
+}: {
+  to: "/scan" | "/body-setup";
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className="group rounded-2xl border border-border bg-background p-5 text-left transition hover:border-[color:var(--plum)] hover:bg-[color:var(--plum)]/5"
+    >
+      <span className="h-10 w-10 rounded-xl grid place-items-center bg-[color:var(--plum)]/10 text-[color:var(--plum)]">
+        {icon}
+      </span>
+      <span className="mt-3 block font-medium">{title}</span>
+      <span className="mt-1 block text-sm text-muted-foreground">{body}</span>
+    </Link>
   );
 }

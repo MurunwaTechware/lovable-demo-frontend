@@ -2,11 +2,13 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Shield, Lock, UserCircle2, ShieldCheck, ArrowRight, ArrowLeft, Check,
-  Play, Sparkles, ScanLine, IdCard, Users, Mail, PartyPopper, Loader2,
+  Play, Sparkles, ScanLine, IdCard, Users, Mail, Loader2, PencilRuler,
 } from "lucide-react";
-import { BodyQuestionnaire } from "@/components/BodyQuestionnaire";
+import { HeightField, Kicker, WeightField } from "@/components/body-form-bits";
+import { heightOk, weightOk } from "@/lib/body-form";
 import { Nav } from "@/components/Nav";
-import { useBodyProfile } from "@/lib/body-profile";
+import { COLOURS, useAboutYou, useSaveAboutYou } from "@/lib/about-you";
+import { SEXES, type Sex } from "@/lib/body-profile";
 import { trustStore, useTrust } from "@/lib/trust-store";
 import heroImg from "@/assets/hero.jpg";
 import twinImg from "@/assets/twin.jpg";
@@ -27,21 +29,24 @@ export const Route = createFileRoute("/onboarding")({
   }),
 });
 
+// Onboarding runs once: consents, then a few quick answers ("About you"), then the choice of how to set up
+// the twin, which finishes onboarding and goes to that page (the scan, or the body questionnaire), outside
+// onboarding. Both end on the twin page, where the twin is edited from then on.
 // "How it works" (the scan tutorial) is commented out while the onboarding flow is being decided.
-// To bring it back: restore it here after "Privacy", set BODY_STEP to 5, and undo the step numbers below.
-const STEPS = ["Welcome", "Privacy", /* "How it works", */ "Age", "Terms", "Your body", "Done"] as const;
-const BODY_STEP = 4;
+// To bring it back: restore it here after "Privacy", add 1 to the step numbers below.
+const STEPS = ["Welcome", "Privacy", /* "How it works", */ "Age", "Terms", "About you", "Your twin"] as const;
+const ABOUT_STEP = 4;
+const CHOICE_STEP = 5;
 
 function Onboarding() {
   const trust = useTrust();
   const navigate = useNavigate();
   const { from } = Route.useSearch();
-  const body = useBodyProfile();
-  // Back after finishing: straight to the body questions, with the saved answers, to change them
-  const [step, setStep] = useState(trust.onboarded && from !== "start" ? BODY_STEP : 0);
+  // Back after finishing: straight to "About you", with the saved answers, to change them
+  const [step, setStep] = useState(trust.onboarded && from !== "start" ? ABOUT_STEP : 0);
   // The saved onboarding state is only read in the browser, after the first render
   useEffect(() => {
-    if (trust.onboarded && from !== "start") setStep((s) => (s === 0 ? BODY_STEP : s));
+    if (trust.onboarded && from !== "start") setStep((s) => (s === 0 ? ABOUT_STEP : s));
   }, [trust.onboarded, from]);
   const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
   const back = () => setStep((s) => Math.max(s - 1, 0));
@@ -50,8 +55,7 @@ function Onboarding() {
     <div className="min-h-screen bg-background text-foreground">
       <Nav />
       <div className="pt-16" />
-      {/* Wider for the body step: the mesh and the measurements side by side */}
-      <div className={`mx-auto px-6 py-12 ${step === BODY_STEP ? "max-w-6xl" : "max-w-4xl"}`}>
+      <div className="mx-auto max-w-4xl px-6 py-12">
         {/* progress */}
         <div className="mb-10">
           <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.2em] text-muted-foreground mb-3">
@@ -66,26 +70,22 @@ function Onboarding() {
           </div>
         </div>
 
-        {/* overflow-clip, not overflow-hidden, so the body step's mesh can stay in view (sticky) */}
-        <div className="rounded-[2rem] border border-border bg-card shadow-[var(--shadow-card)] overflow-clip animate-fade-up">
+        <div className="rounded-[2rem] border border-border bg-card shadow-[var(--shadow-card)] overflow-hidden animate-fade-up">
           {step === 0 && <Welcome onNext={next} />}
           {step === 1 && <Privacy onNext={next} onBack={back} />}
           {/* {step === 2 && <HowItWorks onNext={next} onBack={back} />} */}
           {step === 2 && <AgeVerify onNext={next} onBack={back} />}
           {step === 3 && <Terms onNext={next} onBack={back} />}
-          {step === BODY_STEP &&
-            (body.isLoading ? (
-              <div className="p-16 grid place-items-center text-muted-foreground">
-                <Loader2 className="h-6 w-6 animate-spin" />
-              </div>
-            ) : (
-              <BodyQuestionnaire initial={body.data} onDone={next} onBack={back} doneLabel="Save and continue" />
-            ))}
-          {step === 5 && (
-            <Done
-              onFinish={() => {
+          {step === ABOUT_STEP && <AboutYouStep onNext={next} onBack={back} />}
+          {step === CHOICE_STEP && (
+            <TwinChoice
+              onBack={back}
+              onChoose={(to) => {
+                // Choosing finishes onboarding, so leaving the scan or the questions halfway doesn't
+                // land the user back in onboarding next time
                 trustStore.completeOnboarding();
-                navigate({ to: "/twin" }); // where the base twin from the questionnaire now shows
+                if (to === "/twin") navigate({ to });
+                else navigate({ to, search: { from: "onboarding" } });
               }}
             />
           )}
@@ -410,37 +410,191 @@ function Checkbox({ checked, onChange, label }: { checked: boolean; onChange: (v
   );
 }
 
-function Done({ onFinish }: { onFinish: () => void }) {
+function AboutYouStep({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
+  const about = useAboutYou();
+  if (about.isLoading) {
+    return (
+      <div className="p-16 grid place-items-center text-muted-foreground">
+        <Loader2 className="h-6 w-6 animate-spin" />
+      </div>
+    );
+  }
+  // Mounted once the saved answers are in, so it starts from them
+  return <AboutYouForm saved={about.data ?? null} onNext={onNext} onBack={onBack} />;
+}
+
+function AboutYouForm({
+  saved,
+  onNext,
+  onBack,
+}: {
+  saved: ReturnType<typeof useAboutYou>["data"] | null;
+  onNext: () => void;
+  onBack: () => void;
+}) {
+  const save = useSaveAboutYou();
+  const [sex, setSex] = useState<Sex | null>(saved?.sex ?? null);
+  const [heightCm, setHeightCm] = useState<number>(saved?.height_cm ?? 0);
+  const [weight, setWeight] = useState(saved?.weight_kg ? String(saved.weight_kg) : "");
+  const [colour, setColour] = useState<string | null>(saved?.favourite_colour ?? null);
+  const ready = sex !== null && heightOk(heightCm) && weightOk(weight);
+
+  const submit = () =>
+    save.mutate(
+      {
+        sex,
+        height_cm: heightCm,
+        weight_kg: weight.trim() ? Number(weight) : null,
+        favourite_colour: colour,
+      },
+      { onSuccess: onNext },
+    );
+
   return (
-    <div className="p-8 md:p-12 text-center">
-      <div className="mx-auto h-24 w-24 rounded-full grid place-items-center" style={{ background: "var(--gradient-plum)" }}>
-        <PartyPopper className="h-10 w-10 text-white" />
-      </div>
-      <h2 className="mt-6 text-4xl font-display">You're <span className="italic">ready</span>.</h2>
-      <p className="mt-3 text-muted-foreground max-w-md mx-auto">
-        Your account has been created, your Digital Body Twin is protected, and you can update your privacy settings at any time.
+    <div className="p-8 md:p-12">
+      <Kicker>06 · About you</Kicker>
+      <h2 className="mt-3 text-4xl font-display">
+        A little about <span className="italic">you</span>.
+      </h2>
+      <p className="mt-2 text-sm text-muted-foreground max-w-xl">
+        So your twin starts with your shape and the app knows what you like. You can change any of this
+        later.
       </p>
-      <div className="mt-6 grid sm:grid-cols-3 gap-3 max-w-lg mx-auto text-left">
-        <MiniStat icon={<ShieldCheck className="h-4 w-4" />} label="Encrypted twin" />
-        <MiniStat icon={<UserCircle2 className="h-4 w-4" />} label="Private by default" />
-        <MiniStat icon={<Sparkles className="h-4 w-4" />} label="Personalised" />
+
+      <div className="mt-8 space-y-8">
+        <div>
+          <div className="text-sm font-medium mb-2">Which body should your twin start from?</div>
+          <div className="inline-flex rounded-full bg-secondary p-1 text-sm" role="radiogroup" aria-label="Body">
+            {SEXES.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                role="radio"
+                aria-checked={sex === s.id}
+                onClick={() => setSex(s.id)}
+                className={`rounded-full px-5 py-2 transition ${sex === s.id ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"}`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-8">
+          <HeightField cm={heightCm} onChange={setHeightCm} />
+          <WeightField value={weight} onChange={setWeight} placeholder="e.g. 65" />
+        </div>
+
+        <div>
+          <div className="text-sm font-medium">
+            Favourite colour <span className="text-muted-foreground font-normal">· optional</span>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2.5" role="radiogroup" aria-label="Favourite colour">
+            {COLOURS.map((c) => {
+              const selected = colour === c.id;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={c.label}
+                  title={c.label}
+                  onClick={() => setColour(selected ? null : c.id)}
+                  className={`h-10 w-10 rounded-full border transition grid place-items-center ${selected ? "ring-2 ring-offset-2 ring-[color:var(--plum)] ring-offset-card border-transparent" : "border-border hover:scale-105"}`}
+                  style={{ background: c.hex }}
+                >
+                  {selected && (
+                    <Check className={`h-4 w-4 ${["white", "beige", "yellow", "pink"].includes(c.id) ? "text-black" : "text-white"}`} />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground" aria-live="polite">
+            {colour ? COLOURS.find((c) => c.id === colour)?.label : "None picked"}
+          </p>
+        </div>
       </div>
-      <div className="mt-8 flex flex-wrap gap-3 justify-center">
-        <button onClick={onFinish} className="inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-6 py-3 text-sm font-medium">
-          <ScanLine className="h-4 w-4" /> Create my Digital Twin
-        </button>
-        <Link to="/privacy" className="inline-flex items-center gap-2 rounded-full border border-border px-6 py-3 text-sm font-medium hover:bg-accent">
-          Privacy settings
-        </Link>
-      </div>
+
+      {save.isError && (
+        <p className="mt-6 text-sm text-[color:var(--plum)]" role="alert">
+          {save.error instanceof Error ? save.error.message : "Couldn't save. Please try again."}
+        </p>
+      )}
+      <NavRow
+        onBack={onBack}
+        onNext={submit}
+        nextLabel={save.isPending ? "Saving…" : "Continue"}
+        nextDisabled={!ready || save.isPending}
+      />
     </div>
   );
 }
 
-function MiniStat({ icon, label }: { icon: React.ReactNode; label: string }) {
+function TwinChoice({
+  onBack,
+  onChoose,
+}: {
+  onBack: () => void;
+  onChoose: (to: "/scan" | "/body-setup" | "/twin") => void;
+}) {
+  const options = [
+    {
+      to: "/scan" as const,
+      icon: <ScanLine className="h-6 w-6" />,
+      title: "AI scan",
+      body: "Three photos (front, left and right) and your details. AI works out your measurements from them.",
+      note: "About 2 minutes, plus a minute to measure",
+      cta: "Scan my body",
+    },
+    {
+      to: "/body-setup" as const,
+      icon: <PencilRuler className="h-6 w-6" />,
+      title: "A few questions",
+      body: "Pick the body closest to yours and tell us the sizes you usually buy. No photos.",
+      note: "About a minute",
+      cta: "Answer the questions",
+    },
+  ];
   return (
-    <div className="rounded-2xl border border-border bg-secondary/40 p-4 flex items-center gap-2 text-sm">
-      <span className="text-[color:var(--plum)]">{icon}</span> {label}
+    <div className="p-8 md:p-12">
+      <Kicker>07 · Your twin</Kicker>
+      <h2 className="mt-3 text-4xl font-display">
+        How do you want to set up your <span className="italic">twin</span>?
+      </h2>
+      <p className="mt-2 text-sm text-muted-foreground max-w-xl">
+        Either way, you can fine-tune every measurement on your twin page, or switch to the other one
+        later.
+      </p>
+      <div className="mt-8 grid md:grid-cols-2 gap-4">
+        {options.map((o) => (
+          <button
+            key={o.to}
+            type="button"
+            onClick={() => onChoose(o.to)}
+            className="group flex flex-col rounded-[1.5rem] border border-border bg-secondary/30 p-6 text-left transition hover:border-[color:var(--plum)] hover:bg-[color:var(--plum)]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--plum)]"
+          >
+            <span className="h-12 w-12 rounded-2xl grid place-items-center text-white" style={{ background: "var(--gradient-plum)" }}>
+              {o.icon}
+            </span>
+            <span className="mt-4 font-display text-2xl">{o.title}</span>
+            <span className="mt-2 text-sm text-muted-foreground">{o.body}</span>
+            <span className="mt-3 text-xs text-muted-foreground">{o.note}</span>
+            <span className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-[color:var(--plum)]">
+              {o.cta} <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+            </span>
+          </button>
+        ))}
+      </div>
+      <div className="mt-10 flex items-center justify-between">
+        <button onClick={onBack} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" /> Back
+        </button>
+        <button onClick={() => onChoose("/twin")} className="text-sm text-muted-foreground underline-offset-4 hover:underline hover:text-foreground">
+          Decide later
+        </button>
+      </div>
     </div>
   );
 }

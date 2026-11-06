@@ -107,7 +107,7 @@ function TwinPage() {
         {/* In-page sections */}
         <nav className="mt-8 flex flex-wrap gap-2 text-xs font-medium" aria-label="Sections">
           {[
-            ["#base-body", "Base body"],
+            ["#base-body", "Your twin"],
             ["#measurements", "Latest measurements"],
             ["#tryon-photo", "Try-on photos"],
             ["#tryons", `Saved try-ons (${tryOns.length})`],
@@ -143,12 +143,12 @@ function TwinPage() {
           </p>
         )}
 
-        {/* The base body from the onboarding questionnaire */}
+        {/* The twin: from a scan or the body questionnaire, edited at /twin/edit */}
         <section id="base-body" className="mt-10 scroll-mt-24">
           <SectionTitle
             icon={<UserRound className="h-4 w-4" />}
-            title="Your base body"
-            hint="Where your twin starts: your build, height and the sizes you buy."
+            title="Your twin"
+            hint="Its build and measurements, from your scan or your answers. Edit them any time."
           />
           <BaseBodyCard />
         </section>

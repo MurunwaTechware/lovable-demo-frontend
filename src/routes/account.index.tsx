@@ -47,10 +47,10 @@ function BodySetup() {
   return (
     <Panel
       title="Body setup"
-      description="The build, height and sizes your Digital Twin starts from. Change them any time."
+      description="Your Digital Twin's build, height and measurements. Change them any time."
       action={
-        <Link to="/body-setup" className={buttonClass.secondary}>
-          <PencilRuler className="h-4 w-4" /> Redo body setup
+        <Link to="/twin/edit" className={buttonClass.secondary}>
+          <PencilRuler className="h-4 w-4" /> Edit your twin
         </Link>
       }
     />

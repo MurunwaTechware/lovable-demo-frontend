@@ -1,25 +1,26 @@
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Loader2, Ruler } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2 } from "lucide-react";
 
 import { BodyMesh } from "@/components/BodyMesh";
-import type {
-  BackendMeasurementValue,
-  BodyProfile,
-  BodyProfileAnswers,
-  BodyType,
-  MeasurementKey,
-} from "@/lib/api";
+import {
+  Chip,
+  HeightField,
+  Kicker,
+  Result,
+  UnitToggle,
+  WeightField,
+} from "@/components/body-form-bits";
+import { heightOk, weightOk } from "@/lib/body-form";
+import { useKeepAboutYouInStep } from "@/lib/about-you";
+import type { AboutYou, BodyProfile, BodyProfileAnswers, BodyType } from "@/lib/api";
 import {
   BODY_TYPES,
-  MEASUREMENT_HINTS,
-  MEASUREMENT_LIMITS,
   MORE_KEYS,
-  MORE_MEASUREMENTS,
   SEXES,
-  SOURCE_LABELS,
-  allMeasurementKeys,
   baseBody,
   baseMeasurementsAt,
+  buildMeasurements,
+  manualMeasurements,
   measurementKeys,
   measurementName,
   meshFor,
@@ -32,48 +33,58 @@ import {
   DRESS_SIZES,
   JEANS_WAISTS,
   bustFromBra,
-  cmToFeetInches,
   dressSizeLabel,
-  feetInchesToCm,
   waistFromJeans,
   waistHipFromDressSize,
   type BandSystem,
-  type Range,
 } from "@/lib/body-sizes";
 
-// The body questionnaire: base body (sex and build, shown as the mesh), height and weight, waist from a
-// jeans or dress size, and bust from a bra size. It ends on the user's measurements (the main ones, and the
-// rest the mesh viewer uses under "More measurements"), which they can edit,
-// and saves them to their account. Used at the end of onboarding and on /body-setup, where it opens with
-// the saved answers so it can be done again any number of times; each save replaces the last.
-//
-// Each measurement comes from the best source there is, best first:
-//   typed in by the user here   ("manual")
-//   worked out from a size      ("questionnaire": a range, e.g. the waist from a jeans size)
-//   the chosen base body        ("base": that mesh's own measurement, scaled to the user's height)
+// The body questionnaire, one of the two ways to set up a twin (the other is the scan): the base body
+// (sex and build, shown as the mesh), the waist from a jeans or dress size, and the bust from a bra size.
+// Height and weight come from onboarding's "About you" (asked here only when there's none yet). It saves
+// the twin and goes on to the twin page, where the measurements can be checked and changed (the editor).
+// Opens with the saved answers, so it can be done again any number of times; each save replaces the last
+// but keeps the numbers the user typed in themselves.
 
-type Step = "body" | "size" | "waist" | "bust" | "summary";
+type Step = "body" | "size" | "waist" | "bust";
 type WaistSystem = "jeans_inches" | "dress_size" | "skip";
 
 export function BodyQuestionnaire({
   initial,
+  about,
   onDone,
   onBack,
-  doneLabel = "Save my body",
+  doneLabel = "Save my twin",
 }: {
   initial?: BodyProfile | null;
+  about?: AboutYou | null;
   onDone: () => void;
-  /** Back from the first step (in onboarding: to the previous page) */
+  /** Back from the first step */
   onBack?: () => void;
   doneLabel?: string;
 }) {
-  const [sex, setSex] = useState<Sex>(initial?.sex ?? "female");
+  // Sex, height and weight from whichever was saved last: "About you" (e.g. just changed in onboarding)
+  // or the twin. Saving the twin updates "About you" too, so normally they agree.
+  const aboutIsNewer = !!about && (!initial || about.updated_at >= initial.updated_at);
+  const fromTwin = {
+    sex: initial?.sex ?? null,
+    height: initial?.measurements.height?.value ?? null,
+    weight: initial?.weight_kg ?? null,
+  };
+  const fromAbout = {
+    sex: about?.sex ?? null,
+    height: about?.height_cm ?? null,
+    weight: about?.weight_kg ?? null,
+  };
+  const [first, second] = aboutIsNewer ? [fromAbout, fromTwin] : [fromTwin, fromAbout];
+  const [sex, setSex] = useState<Sex>(first.sex ?? second.sex ?? "female");
   const [bodyType, setBodyType] = useState<BodyType>(initial?.body_type ?? "average");
-  const [heightCm, setHeightCm] = useState<number>(
-    initial?.measurements.height?.value ?? (initial?.sex === "male" ? 178 : 165),
-  );
-  const [heightUnit, setHeightUnit] = useState<"cm" | "ft">("cm");
-  const [weight, setWeight] = useState(initial?.weight_kg ? String(initial.weight_kg) : "");
+  const knownHeight = first.height ?? second.height;
+  const [heightCm, setHeightCm] = useState<number>(knownHeight ?? (sex === "male" ? 178 : 165));
+  const [weight, setWeight] = useState(() => {
+    const kg = first.weight ?? second.weight;
+    return kg ? String(kg) : "";
+  });
   const [waistSystem, setWaistSystem] = useState<WaistSystem>(
     initial?.waist?.system ?? "jeans_inches",
   );
@@ -83,31 +94,19 @@ export function BodyQuestionnaire({
   const [band, setBand] = useState<number | null>(initial?.bra?.band ?? null);
   const [cup, setCup] = useState<string | null>(initial?.bra?.cup ?? null);
   const [step, setStep] = useState<Step>("body");
-  // Measurements the user typed in (as typed, so half-finished numbers can be edited), from a previous
-  // save too. Height has its own question.
-  const [overrides, setOverrides] = useState<Partial<Record<MeasurementKey, string>>>(() =>
-    Object.fromEntries(
-      Object.entries(initial?.measurements ?? {})
-        .filter(([k, m]) => k !== "height" && m?.source === "manual")
-        .map(([k, m]) => [k, String(m!.value)]),
-    ),
-  );
-  const setOverride = (k: MeasurementKey, v: string | undefined) =>
-    setOverrides((o) => {
-      const next = { ...o };
-      if (v === undefined) delete next[k];
-      else next[k] = v;
-      return next;
-    });
-  // "More measurements" starts open when the user has typed one of them in before
-  const [showMore, setShowMore] = useState(() => MORE_KEYS.some((k) => overrides[k] !== undefined));
   const save = useSaveBodyProfile();
+  const keepAboutYouInStep = useKeepAboutYouInStep();
 
-  const steps: Step[] =
-    sex === "female"
-      ? ["body", "size", "waist", "bust", "summary"]
-      : ["body", "size", "waist", "summary"];
+  // Height and weight were asked in onboarding; only ask here if they weren't
+  const [askSize] = useState(knownHeight === null);
+  const steps: Step[] = [
+    "body",
+    ...(askSize ? (["size"] as const) : []),
+    "waist",
+    ...(sex === "female" ? (["bust"] as const) : []),
+  ];
   const at = steps.indexOf(step);
+  const last = at === steps.length - 1;
   const go = (delta: number) => {
     const next = steps[at + delta];
     if (next) setStep(next);
@@ -123,135 +122,55 @@ export function BodyQuestionnaire({
         : null;
   const bra =
     sex === "female" && !braSkip && band && cup ? bustFromBra(band, bandSystem, cup) : null;
-  const weightKg = weight ? Number(weight) : null;
-  const weightOk = weightKg === null || (weightKg >= 25 && weightKg <= 300);
-  const heightOk = heightCm >= 100 && heightCm <= 230;
+  const weightKg = weight.trim() ? Number(weight) : null;
   const base = baseMeasurementsAt(
     sex,
     bodyType,
-    heightOk ? heightCm : baseBody(sex, bodyType).height,
-  );
-  const editableKeys = allMeasurementKeys(sex).filter((k) => k !== "height");
-  const mainKeys = measurementKeys(sex).filter((k) => k !== "height");
-
-  // What a measurement is without the user's own number: from a size, else from the base body
-  const suggestion = (k: MeasurementKey): BackendMeasurementValue | null => {
-    const fromSizes = (r: Range): BackendMeasurementValue => ({ ...r, source: "questionnaire" });
-    if (k === "waist" && sized) return fromSizes(sized.waist);
-    if (k === "hip" && sized && "hip" in sized) return fromSizes(sized.hip);
-    if (k === "bust" && bra) return fromSizes(bra.bust);
-    if (k === "underbust" && bra) return fromSizes(bra.underbust);
-    const v = base.measurements[k];
-    return v != null ? { value: v, source: "base" } : null;
-  };
-  const validOverride = (k: MeasurementKey, typed: string) => {
-    const v = Number(typed);
-    const [lo, hi] = MEASUREMENT_LIMITS[k];
-    return typed.trim() !== "" && Number.isFinite(v) && v >= lo && v <= hi;
-  };
-  const overridesOk = editableKeys.every(
-    (k) => overrides[k] === undefined || validOverride(k, overrides[k]!),
+    heightOk(heightCm) ? heightCm : baseBody(sex, bodyType).height,
   );
 
   const answers = (): BodyProfileAnswers => {
-    const measurements: BodyProfileAnswers["measurements"] = {
-      height: { value: heightCm, source: "manual" }, // typed in, not worked out from a size
-    };
-    for (const k of editableKeys) {
-      const typed = overrides[k];
-      const m =
-        typed !== undefined
-          ? { value: Math.round(Number(typed) * 10) / 10, source: "manual" as const }
-          : suggestion(k);
-      if (m) measurements[k] = m;
-    }
+    const waist =
+      waistSystem !== "skip" && waistSize ? { system: waistSystem, size: waistSize } : null;
+    const braAnswer = bra && band && cup ? { band, band_system: bandSystem, cup } : null;
     return {
       sex,
       body_type: bodyType,
       weight_kg: weightKg,
-      waist: waistSystem !== "skip" && waistSize ? { system: waistSystem, size: waistSize } : null,
-      bra: bra && band && cup ? { band, band_system: bandSystem, cup } : null,
-      measurements,
+      waist,
+      bra: braAnswer,
+      // From the answers now, not an earlier scan; what the user typed in themselves stays
+      measurements: buildMeasurements(
+        { sex, bodyType, heightCm, waist, bra: braAnswer },
+        manualMeasurements(initial),
+      ),
+      scan_job: null,
     };
   };
 
   const canContinue =
     step === "size"
-      ? heightOk && weightOk
+      ? heightOk(heightCm) && weightOk(weight)
       : step === "waist"
         ? waistSystem === "skip" || !!waistSize
         : step === "bust"
           ? braSkip || !!bra
           : true;
 
-  // One editable measurement on the last step: its name, where to measure, where the number came from
-  const measurementRow = (k: MeasurementKey) => {
-    const suggested = suggestion(k);
-    const typed = overrides[k];
-    const invalid = typed !== undefined && !validOverride(k, typed);
-    const [lo, hi] = MEASUREMENT_LIMITS[k];
-    return (
-      <li key={k} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
-        <span className="flex items-start gap-2 min-w-0">
-          <Ruler className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--plum)]" />
-          <span className="min-w-0">
-            <span className="block">{measurementName(k, sex)}</span>
-            <span className="block text-[11px] text-muted-foreground leading-snug">
-              {MEASUREMENT_HINTS[k]}
-            </span>
-            <span className="block text-[11px] text-muted-foreground leading-snug">
-              {typed !== undefined ? (
-                <>
-                  {invalid ? `Between ${lo} and ${hi} cm` : SOURCE_LABELS.manual} ·{" "}
-                  <button
-                    type="button"
-                    onClick={() => setOverride(k, undefined)}
-                    className="underline underline-offset-2 hover:text-foreground"
-                  >
-                    Use {suggested ? `${suggested.value} cm` : "suggestion"}
-                  </button>
-                </>
-              ) : suggested ? (
-                <>
-                  {SOURCE_LABELS[suggested.source]}
-                  {suggested.min != null && (
-                    <span className="tabular-nums">
-                      {" "}
-                      · {suggested.min}–{suggested.max} cm
-                    </span>
-                  )}
-                </>
-              ) : null}
-            </span>
-          </span>
-        </span>
-        <label className="relative shrink-0">
-          <span className="sr-only">{measurementName(k, sex)} in cm</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            step={0.5}
-            value={typed ?? (suggested ? String(suggested.value) : "")}
-            onChange={(e) => setOverride(k, e.target.value)}
-            aria-invalid={invalid}
-            className={`w-24 h-10 rounded-xl border bg-background pl-3 pr-9 text-right tabular-nums outline-none transition focus:ring-2 focus:ring-ring ${invalid ? "border-[color:var(--plum)] bg-[color:var(--plum)]/5" : typed !== undefined ? "border-[color:var(--plum)]/60" : "border-border"}`}
-          />
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-            cm
-          </span>
-        </label>
-      </li>
-    );
-  };
+  const finish = () =>
+    save.mutate(answers(), {
+      onSuccess: () => {
+        keepAboutYouInStep(sex, heightCm, weightKg);
+        onDone();
+      },
+    });
 
   const mesh = meshFor(sex, bodyType);
 
   return (
     <div className="grid md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-      {/* The base body, as it is with the answers so far. A fixed height (kept in view while the
-          measurements scroll past) rather than the column's, which grows with "More measurements" and
-          would make the camera zoom in on it. */}
-      <div className="relative bg-secondary/40 h-[360px] md:sticky md:top-20 md:self-start md:h-[calc(100svh-7rem)] md:min-h-[520px] md:max-h-[760px]">
+      {/* The base body, as it is with the answers so far */}
+      <div className="relative bg-secondary/40 h-[360px] md:h-auto md:min-h-[560px]">
         <BodyMesh
           key={mesh.model}
           model={mesh.model}
@@ -287,7 +206,7 @@ export function BodyQuestionnaire({
               Which body is <span className="italic">closest</span> to yours?
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              This is the starting point for your twin. You'll fine-tune it with your sizes next.
+              This is the starting point for your twin. Your sizes fine-tune it next.
             </p>
             <div
               className="mt-6 inline-flex rounded-full bg-secondary p-1 text-sm"
@@ -335,7 +254,12 @@ export function BodyQuestionnaire({
                 );
               })}
             </div>
-            <BaseNumbers sex={sex} bodyType={bodyType} />
+            <BaseNumbers
+              sex={sex}
+              heightCm={heightOk(heightCm) ? heightCm : null}
+              measurements={base.measurements}
+              weightKg={base.weightKg}
+            />
           </section>
         )}
 
@@ -343,58 +267,16 @@ export function BodyQuestionnaire({
           <section className="mt-6">
             <Kicker>Height & weight</Kicker>
             <h2 className="mt-2 font-display text-3xl md:text-4xl">How tall are you?</h2>
-            <div className="mt-6 flex items-end gap-3 flex-wrap">
-              {heightUnit === "cm" ? (
-                <label className="block">
-                  <span className="block text-sm font-medium mb-2">Height (cm)</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={100}
-                    max={230}
-                    value={heightCm}
-                    onChange={(e) => setHeightCm(Number(e.target.value))}
-                    className={inputClass(!heightOk)}
-                  />
-                </label>
-              ) : (
-                <HeightFeet cm={heightCm} onChange={setHeightCm} />
-              )}
-              <UnitToggle
-                value={heightUnit}
-                options={[
-                  ["cm", "cm"],
-                  ["ft", "ft / in"],
-                ]}
-                onChange={(u) => setHeightUnit(u as "cm" | "ft")}
+            <div className="mt-6">
+              <HeightField cm={heightCm} onChange={setHeightCm} />
+            </div>
+            <div className="mt-8">
+              <WeightField
+                value={weight}
+                onChange={setWeight}
+                placeholder={`e.g. ${base.weightKg}`}
               />
             </div>
-            <p className="mt-2 text-xs text-muted-foreground tabular-nums">
-              {heightOk
-                ? `${cmToFeetInches(heightCm).feet}′${cmToFeetInches(heightCm).inches}″ · ${heightCm} cm`
-                : "Enter a height between 100 and 230 cm."}
-            </p>
-
-            <label className="mt-8 block max-w-xs">
-              <span className="block text-sm font-medium mb-2">
-                Weight (kg) <span className="text-muted-foreground font-normal">· optional</span>
-              </span>
-              <input
-                type="number"
-                inputMode="decimal"
-                min={25}
-                max={300}
-                placeholder={`e.g. ${base.weightKg}`}
-                value={weight}
-                onChange={(e) => setWeight(e.target.value)}
-                className={inputClass(!weightOk)}
-              />
-            </label>
-            {!weightOk && (
-              <p className="mt-1.5 text-xs text-[color:var(--plum)]">
-                Enter a weight between 25 and 300 kg.
-              </p>
-            )}
           </section>
         )}
 
@@ -510,84 +392,16 @@ export function BodyQuestionnaire({
           </section>
         )}
 
-        {step === "summary" && (
-          <section className="mt-6">
-            <Kicker>Your measurements</Kicker>
-            <h2 className="mt-2 font-display text-3xl md:text-4xl">
-              Here's your <span className="italic">base</span> twin.
-            </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              These start from the {BODY_TYPES.find((t) => t.id === bodyType)?.label.toLowerCase()}{" "}
-              body at your height, with your sizes filled in. If you know a measurement, type it in.
-            </p>
-            <ul className="mt-6 divide-y divide-border rounded-2xl border border-border">
-              <li className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
-                <span className="inline-flex items-center gap-2">
-                  <Ruler className="h-4 w-4 text-[color:var(--plum)]" /> Height
-                </span>
-                <span className="text-right">
-                  <span className="font-medium tabular-nums">{heightCm} cm</span>
-                  <span className="block text-[11px] text-muted-foreground">
-                    {SOURCE_LABELS.manual}
-                  </span>
-                </span>
-              </li>
-              {mainKeys.map(measurementRow)}
-            </ul>
-
-            <div className="mt-4 rounded-2xl border border-border">
-              <button
-                type="button"
-                onClick={() => setShowMore((v) => !v)}
-                aria-expanded={showMore}
-                aria-controls="more-measurements"
-                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm"
-              >
-                <span>
-                  <span className="font-medium">More measurements</span>
-                  <span className="block text-[11px] text-muted-foreground">
-                    Neck, shoulders, arms and legs, from your base body · {MORE_KEYS.length}
-                  </span>
-                </span>
-                <ChevronDown
-                  className={`h-4 w-4 shrink-0 transition ${showMore ? "rotate-180" : ""}`}
-                />
-              </button>
-              {showMore && (
-                <div id="more-measurements" className="border-t border-border">
-                  {MORE_MEASUREMENTS.map((group) => (
-                    <div key={group.title}>
-                      <div className="px-4 pt-3 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                        {group.title}
-                      </div>
-                      <ul className="divide-y divide-border">{group.keys.map(measurementRow)}</ul>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            {editableKeys.some(
-              (k) => overrides[k] !== undefined && !validOverride(k, overrides[k]!),
-            ) && (
-              <p className="mt-3 text-xs text-[color:var(--plum)]" role="alert">
-                Check the highlighted measurements: they look out of range
-                {!showMore && MORE_KEYS.some((k) => overrides[k] !== undefined) && (
-                  <> (some are under More measurements)</>
-                )}
-                .
-              </p>
-            )}
-            {weightKg !== null && (
-              <p className="mt-3 text-xs text-muted-foreground">Weight: {weightKg} kg</p>
-            )}
-            {save.isError && (
-              <p className="mt-4 text-sm text-[color:var(--plum)]" role="alert">
-                {save.error instanceof Error
-                  ? save.error.message
-                  : "Couldn't save. Please try again."}
-              </p>
-            )}
-          </section>
+        {last && (
+          <p className="mt-6 text-xs text-muted-foreground">
+            Saving makes your twin from these answers. You can check and change every measurement on
+            your twin page afterwards.
+          </p>
+        )}
+        {save.isError && (
+          <p className="mt-4 text-sm text-[color:var(--plum)]" role="alert">
+            {save.error instanceof Error ? save.error.message : "Couldn't save. Please try again."}
+          </p>
         )}
 
         <div className="mt-10 md:mt-auto pt-6 flex items-center justify-between">
@@ -603,11 +417,11 @@ export function BodyQuestionnaire({
           ) : (
             <span />
           )}
-          {step === "summary" ? (
+          {last ? (
             <button
               type="button"
-              onClick={() => save.mutate(answers(), { onSuccess: onDone })}
-              disabled={save.isPending || !overridesOk}
+              onClick={finish}
+              disabled={save.isPending || !canContinue}
               className="inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-6 py-3 text-sm font-medium disabled:opacity-60"
             >
               {save.isPending ? (
@@ -633,135 +447,34 @@ export function BodyQuestionnaire({
   );
 }
 
-// ── Bits ──────────────────────────────────────────────────────────────────────
-
-function Kicker({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="text-[11px] uppercase tracking-[0.24em] text-[color:var(--plum)]">
-      {children}
-    </span>
-  );
-}
-
-function Chip({
-  selected,
-  onClick,
-  children,
+/** The chosen base body's main measurements, at the user's height when it's known */
+function BaseNumbers({
+  sex,
+  heightCm,
+  measurements,
+  weightKg,
 }: {
-  selected: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
+  sex: Sex;
+  heightCm: number | null;
+  measurements: ReturnType<typeof baseMeasurementsAt>["measurements"];
+  weightKg: number;
 }) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      onClick={onClick}
-      className={`min-w-12 rounded-full border px-3.5 py-2 text-sm tabular-nums transition ${selected ? "border-[color:var(--plum)] bg-[color:var(--plum)] text-white" : "border-border hover:bg-accent"}`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function UnitToggle({
-  value,
-  options,
-  onChange,
-}: {
-  value: string;
-  options: [string, string][];
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div
-      className="inline-flex flex-wrap rounded-full bg-secondary p-1 text-xs sm:text-sm"
-      role="radiogroup"
-    >
-      {options.map(([id, label]) => (
-        <button
-          key={id}
-          type="button"
-          role="radio"
-          aria-checked={value === id}
-          onClick={() => onChange(id)}
-          className={`rounded-full px-3.5 py-1.5 transition ${value === id ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"}`}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function Result({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="mt-6 rounded-2xl bg-secondary/60 px-4 py-3 text-sm" aria-live="polite">
-      {children}
-    </p>
-  );
-}
-
-function HeightFeet({ cm, onChange }: { cm: number; onChange: (cm: number) => void }) {
-  const { feet, inches } = cmToFeetInches(cm);
-  return (
-    <div className="flex items-end gap-2">
-      <label className="block">
-        <span className="block text-sm font-medium mb-2">Feet</span>
-        <select
-          value={feet}
-          onChange={(e) => onChange(feetInchesToCm(Number(e.target.value), inches))}
-          className={inputClass(false)}
-        >
-          {[3, 4, 5, 6, 7].map((f) => (
-            <option key={f} value={f}>
-              {f}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="block">
-        <span className="block text-sm font-medium mb-2">Inches</span>
-        <select
-          value={inches}
-          onChange={(e) => onChange(feetInchesToCm(feet, Number(e.target.value)))}
-          className={inputClass(false)}
-        >
-          {Array.from({ length: 12 }, (_, i) => i).map((i) => (
-            <option key={i} value={i}>
-              {i}
-            </option>
-          ))}
-        </select>
-      </label>
-    </div>
-  );
-}
-
-function inputClass(invalid: boolean) {
-  return `w-32 h-12 rounded-xl border bg-background px-4 text-base outline-none transition focus:ring-2 focus:ring-ring ${invalid ? "border-[color:var(--plum)] bg-[color:var(--plum)]/5" : "border-border"}`;
-}
-
-/** The chosen base body's own measurements, as measured on its mesh */
-function BaseNumbers({ sex, bodyType }: { sex: Sex; bodyType: BodyType }) {
-  const body = baseBody(sex, bodyType);
-  const keys = measurementKeys(sex).filter((k) => k !== "height" && body[k] != null);
+  const keys = measurementKeys(sex).filter((k) => k !== "height" && measurements[k] != null);
   return (
     <div className="mt-5 rounded-2xl bg-secondary/60 px-4 py-3 text-xs" aria-live="polite">
       <div className="text-muted-foreground">
-        This body at {Math.round(body.height)} cm, about {Math.round(body.weight_kg)} kg
+        {heightCm ? `This body at your height, ${heightCm} cm` : "This body"}, about {weightKg} kg
       </div>
       <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
         {keys.map((k) => (
           <span key={k} className="tabular-nums">
-            {measurementName(k, sex)} <span className="font-medium">{body[k]} cm</span>
+            {measurementName(k, sex)} <span className="font-medium">{measurements[k]} cm</span>
           </span>
         ))}
       </div>
       <div className="mt-1.5 text-muted-foreground">
-        Plus {MORE_KEYS.length} more (neck, shoulders, arms, legs). All scaled to your height next,
-        and you can change any of them at the end.
+        Plus {MORE_KEYS.length} more (neck, shoulders, arms, legs, lengths). You can change any of
+        them on your twin page.
       </div>
     </div>
   );

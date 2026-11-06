@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Camera, Check, ImagePlus, Loader2, X, ArrowRight } from "lucide-react";
 
@@ -6,10 +6,24 @@ import { Nav } from "@/components/Nav";
 import { ScanCamera } from "@/components/ScanCamera";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { uploadScan, watchJob } from "@/lib/api";
+import { ageFromDob, useAboutYou } from "@/lib/about-you";
+import {
+  getAboutYou,
+  getBodyProfile,
+  getMeasurement,
+  saveBodyProfile,
+  uploadScan,
+  watchJob,
+} from "@/lib/api";
+import { BODY_PROFILE_KEY, profileFromScan } from "@/lib/body-profile";
+import { useTrust } from "@/lib/trust-store";
 import { QUERY_KEYS, SCAN_VIEW_LABELS, type ScanView } from "@/lib/twin-store";
 
 export const Route = createFileRoute("/scan")({
+  // ?from=onboarding: just finished onboarding, so this is the last step of setting up
+  validateSearch: (search: Record<string, unknown>): { from?: "onboarding" } => ({
+    from: search.from === "onboarding" ? "onboarding" : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Body scan — Upload your photos · Mannequin AI" },
@@ -41,6 +55,7 @@ type Errors = Partial<Record<ScanView | "gender" | "weight" | "age" | "form", st
 
 function ScanPage() {
   const navigate = useNavigate();
+  const { from } = Route.useSearch();
   const queryClient = useQueryClient();
   const stopWatching = useRef<(() => void) | null>(null);
   useEffect(() => () => stopWatching.current?.(), []);
@@ -55,6 +70,32 @@ function ScanPage() {
   const [cameraOpen, setCameraOpen] = useState(false);
 
   const heightCm = Math.round((feet * 12 + inches) * 2.54);
+
+  // Start from onboarding's answers: sex, height and weight from "About you", age from the date of birth.
+  // Once, when they arrive, and only into fields the user hasn't filled in yet.
+  const about = useAboutYou();
+  const trust = useTrust();
+  const prefilled = useRef(false);
+  const [wheelStart, setWheelStart] = useState(0);
+  useEffect(() => {
+    if (prefilled.current || about.isLoading) return;
+    prefilled.current = true;
+    const a = about.data;
+    if (a?.sex) setGender((g) => g || a.sex!);
+    if (a?.weight_kg && a.weight_kg >= 30 && a.weight_kg <= 200)
+      setWeight((w) => w || String(a.weight_kg));
+    if (a?.height_cm) {
+      const totalInches = Math.round(a.height_cm / 2.54);
+      const f = Math.floor(totalInches / 12);
+      if (FEET.includes(f)) {
+        setFeet(f);
+        setInches(totalInches % 12);
+        setWheelStart((n) => n + 1);
+      }
+    }
+    const years = ageFromDob(trust.dob);
+    if (years) setAge((x) => x || String(years));
+  }, [about.isLoading, about.data, trust.dob]);
 
   // Release the previews when leaving the page
   const photosRef = useRef(photos);
@@ -112,6 +153,22 @@ function ScanPage() {
     void startMeasuring(w, a);
   };
 
+  // A finished scan becomes the user's twin: its measurements, the base body nearest them, and whatever
+  // the user typed in themselves before. If saving fails, the scan is still on the measurements page.
+  const makeScanTheTwin = async (jobId: string) => {
+    try {
+      const [scan, existing, aboutYou] = await Promise.all([
+        getMeasurement(jobId),
+        getBodyProfile(),
+        getAboutYou().catch(() => null),
+      ]);
+      const profile = await saveBodyProfile(profileFromScan(scan, existing, aboutYou));
+      queryClient.setQueryData(BODY_PROFILE_KEY, profile);
+    } catch (err) {
+      console.warn("Couldn't make the scan the twin", err);
+    }
+  };
+
   // Sends the photos and details to POST /process_upload, waits on /job_events/<job> for the result,
   // then opens /measurements?job=<job>. Measuring itself takes about 30 seconds.
   const startMeasuring = async (weightKg: number, ageYears: number) => {
@@ -142,10 +199,11 @@ function ScanPage() {
       return fail(err instanceof Error ? err.message : "Upload failed. Please try again.");
     }
     stopWatching.current = watchJob(jobId, {
-      ready: () => {
+      ready: async () => {
         void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.profiles });
         // A new finished scan can be the full body try-on photo (when the user hasn't added their own)
         void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.tryOnPhotos });
+        await makeScanTheTwin(jobId);
         navigate({ to: "/measurements", search: { job: jobId } });
       },
       failed: (message) => {
@@ -161,12 +219,24 @@ function ScanPage() {
 
       <main className="mx-auto max-w-5xl px-6 pt-24 pb-24">
         <div className="inline-flex items-center gap-2 text-xs tracking-[0.3em] uppercase text-[color:var(--plum)] font-medium">
-          <span className="h-px w-6 bg-[color:var(--plum)]" /> Body scan
+          <span className="h-px w-6 bg-[color:var(--plum)]" />{" "}
+          {from === "onboarding" ? "Last step · Body scan" : "Body scan"}
         </div>
         <h1 className="mt-3 font-display text-4xl md:text-5xl">Upload your photos</h1>
         <p className="mt-3 max-w-2xl text-muted-foreground">
           Provide three photos of yourself: front, left side and right side. Take them with your
-          camera here, or upload them. Then enter your details.
+          camera here, or upload them. Then enter your details. Your measurements from the scan
+          become your twin.
+        </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Rather not use photos?{" "}
+          <Link
+            to="/body-setup"
+            search={from ? { from } : {}}
+            className="underline underline-offset-4 hover:text-foreground"
+          >
+            Answer a few questions instead
+          </Link>
         </p>
 
         <form
@@ -216,9 +286,22 @@ function ScanPage() {
             <div className="relative flex items-center gap-2">
               {/* The band across the middle marks the selected row */}
               <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 h-12 border-y border-border" />
-              <Wheel values={FEET} value={feet} onChange={setFeet} label="Feet" />
+              {/* Keyed so they start again on the height from "About you" (a wheel reads its value once) */}
+              <Wheel
+                key={`f${wheelStart}`}
+                values={FEET}
+                value={feet}
+                onChange={setFeet}
+                label="Feet"
+              />
               <span className="w-10 text-muted-foreground">ft</span>
-              <Wheel values={INCHES} value={inches} onChange={setInches} label="Inches" />
+              <Wheel
+                key={`i${wheelStart}`}
+                values={INCHES}
+                value={inches}
+                onChange={setInches}
+                label="Inches"
+              />
               <span className="w-10 text-muted-foreground">in</span>
             </div>
             <div className="mt-3 text-sm text-muted-foreground tabular-nums">

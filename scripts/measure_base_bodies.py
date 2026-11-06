@@ -15,7 +15,11 @@ Limbs are cut at right angles to their bone in Anny's skeleton, the torso and le
     head                    widest round the head, from the eyes up
     neck                    narrowest round the neck
     shoulder breadth        straight across, shoulder tip to shoulder tip (the corner of each shoulder)
-    arm length              shoulder tip to elbow to wrist
+    arm length              shoulder tip to elbow to wrist (the upper arm and lower arm below, together)
+    upper arm, lower arm    shoulder tip to the elbow joint; elbow joint to the wrist joint
+    upper leg, lower leg    hip joint to the knee joint; knee joint to the ankle joint
+    nape to waist           height of the back of the neck (where the neck meets the shoulders) above
+                            the natural waist (Anny's waist ring)
     upper arm               halfway from shoulder to elbow
     forearm                 widest, elbow half of the forearm
     wrist                   narrowest, just above the hand
@@ -23,6 +27,7 @@ Limbs are cut at right angles to their bone in Anny's skeleton, the torso and le
     thigh                   widest just below the crotch
     calf                    widest between knee and ankle
     ankle                   narrowest above the ankle joint
+The lengths are the scan's own (gemini_client.Measurements), so a scan's numbers replace them directly.
 Writes src/lib/base-bodies.json, read by the questionnaire. Needs anny==0.5 (torch, warp-lang), trimesh
 and scipy; the six OBJs are the ones the GLBs in public/meshes were converted from.
 
@@ -131,7 +136,7 @@ def measure(model, anthro, faces, out) -> dict[str, float]:
     # Chest: ends at the armpits, where the arms join the torso's slice and its width jumps
     upper = scan(mesh, z0, h, 0.60, 0.85)
     waist_width = upper[0][2]
-    armpit_f = next(f for f, _, wid in upper if wid > 1.6 * waist_width)
+    armpit_f = next((f for f, _, wid in upper if wid > 1.6 * waist_width), 0.80)
     chest = [t for t in upper if 0.64 <= t[0] < armpit_f - 0.01]
     bust_f, m["bust"], _ = max(chest, key=lambda t: t[1])
     below_bust = [t for t in chest if bust_f - 0.07 <= t[0] < bust_f - 0.01]
@@ -155,7 +160,9 @@ def measure(model, anthro, faces, out) -> dict[str, float]:
     tip_l = shoulder_tip(v, shoulder, +1)
     tip_r = shoulder_tip(v, joint("upperarm01.R"), -1)
     m["shoulder_breadth"] = float(np.linalg.norm(tip_l - tip_r))
-    m["arm_length"] = float(np.linalg.norm(tip_l - elbow) + np.linalg.norm(elbow - wrist))
+    m["upper_arm_length"] = float(np.linalg.norm(tip_l - elbow))
+    m["lower_arm_length"] = float(np.linalg.norm(elbow - wrist))
+    m["arm_length"] = m["upper_arm_length"] + m["lower_arm_length"]
     m["shoulder_to_crotch"] = float(tip_l[2] - crotch_z)
     m["bicep"] = along_bone(mesh, shoulder, elbow, 0.5, 0.5, n=1)[0]
     m["forearm"] = max(along_bone(mesh, elbow, wrist, 0.1, 0.6))
@@ -174,6 +181,10 @@ def measure(model, anthro, faces, out) -> dict[str, float]:
         return [c for c in (leg_at(z) for z in np.linspace(z_from, z_to, n)) if c is not None]
 
     shin = knee[2] - ankle[2]
+    m["upper_leg_length"] = float(np.linalg.norm(hip_j - knee))
+    m["lower_leg_length"] = float(np.linalg.norm(knee - ankle))
+    waist_z = float(v[anthro.waist_vertex_indices, 2].mean())
+    m["nape_to_waist"] = float(joint("neck01")[2]) - waist_z
     m["thigh"] = max(over(crotch_z - 0.05, crotch_z - 0.01, n=20))
     m["calf"] = max(over(ankle[2] + 0.4 * shin, knee[2] - 0.1 * shin))
     m["ankle"] = min(over(ankle[2] + 0.03, ankle[2] + 0.35 * shin))

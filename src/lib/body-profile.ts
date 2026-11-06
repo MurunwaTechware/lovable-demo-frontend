@@ -1,5 +1,5 @@
-// The user's body profile from the onboarding questionnaire (backend: GET/PUT /me/body-profile), and the
-// base body meshes it picks from. The meshes are Anny bodies (public/meshes): one per sex and build, each
+// The user's body profile, their twin (backend: GET/PUT /me/body-profile), from the body questionnaire or
+// a scan and adjusted in the twin page's editor, and the base body meshes it picks from. The meshes are Anny bodies (public/meshes): one per sex and build, each
 // with its own measurements (base-bodies.json, made by scripts/measure_base_bodies.py).
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -8,11 +8,15 @@ import baseBodies from "@/lib/base-bodies.json";
 import {
   getBodyProfile,
   saveBodyProfile,
+  type AboutYou,
+  type BackendMeasurement,
+  type BackendMeasurementValue,
   type BodyProfile,
   type BodyProfileAnswers,
   type BodyType,
   type MeasurementKey,
 } from "@/lib/api";
+import { bustFromBra, waistFromJeans, waistHipFromDressSize, type Range } from "@/lib/body-sizes";
 
 export type Sex = BodyProfileAnswers["sex"];
 
@@ -69,6 +73,11 @@ export const MEASUREMENT_NAMES: Record<MeasurementKey, string> = {
   thigh: "Thigh",
   calf: "Calf",
   ankle: "Ankle",
+  upper_arm_length: "Upper arm",
+  lower_arm_length: "Lower arm",
+  upper_leg_length: "Upper leg",
+  lower_leg_length: "Lower leg",
+  nape_to_waist: "Nape to waist",
 };
 
 /** Where to put the tape, for someone measuring themselves */
@@ -90,6 +99,11 @@ export const MEASUREMENT_HINTS: Record<MeasurementKey, string> = {
   thigh: "Round the widest part, just below the crotch",
   calf: "Round the widest part",
   ankle: "Round the narrowest part, above the ankle bone",
+  upper_arm_length: "Shoulder tip to the elbow",
+  lower_arm_length: "Elbow to the wrist",
+  upper_leg_length: "Top of the leg (the hip joint) to the knee",
+  lower_leg_length: "Knee to the ankle",
+  nape_to_waist: "Back of the neck down to your natural waist",
 };
 
 /** The main measurements, the ones clothing sizes go by, in display order (no underbust for men) */
@@ -100,8 +114,9 @@ export function measurementKeys(sex: Sex): MeasurementKey[] {
 }
 
 /**
- * The rest of the measurements the mesh viewer works with (as SMPL-Anthropometry takes them), grouped
- * like the scan page. Every base body has them all; they start from it, scaled to the user's height.
+ * The rest of the measurements: the mesh viewer's (as SMPL-Anthropometry takes them) and the scan's
+ * lengths, grouped like the scan page. Every base body has them all; they start from it, scaled to the
+ * user's height, and a scan replaces every one it estimates.
  */
 export const MORE_MEASUREMENTS: { title: string; keys: MeasurementKey[] }[] = [
   {
@@ -118,6 +133,17 @@ export const MORE_MEASUREMENTS: { title: string; keys: MeasurementKey[] }[] = [
     ],
   },
   { title: "Lower body", keys: ["thigh", "calf", "ankle"] },
+  // The scan's lengths, which are also Anny's own length controls
+  {
+    title: "Lengths",
+    keys: [
+      "upper_arm_length",
+      "lower_arm_length",
+      "upper_leg_length",
+      "lower_leg_length",
+      "nape_to_waist",
+    ],
+  },
 ];
 export const MORE_KEYS: MeasurementKey[] = MORE_MEASUREMENTS.flatMap((g) => g.keys);
 
@@ -147,6 +173,11 @@ export const MEASUREMENT_LIMITS: Record<MeasurementKey, [number, number]> = {
   thigh: [25, 110],
   calf: [15, 75],
   ankle: [10, 45],
+  upper_arm_length: [15, 50],
+  lower_arm_length: [15, 45],
+  upper_leg_length: [25, 70],
+  lower_leg_length: [25, 65],
+  nape_to_waist: [25, 65],
 };
 
 export const SOURCE_LABELS = {
@@ -178,4 +209,162 @@ export function baseMeasurementsAt(sex: Sex, type: BodyType, heightCm: number) {
     if (key !== "height" && v != null) measurements[key] = round(v * k);
   }
   return { measurements, weightKg: Math.round(body.weight_kg * k ** 3) };
+}
+
+// ── Where each measurement comes from ─────────────────────────────────────────
+// Best first: typed in by the user ("manual"), the scan ("scan"), worked out from a clothing size
+// ("questionnaire": a range), the chosen base body scaled to the user's height ("base"). The body
+// questionnaire, a new scan and the twin page's editor all build the profile's measurements this way,
+// so what the user typed in themselves always carries over.
+
+type Measurements = Partial<Record<MeasurementKey, number>>;
+
+export type MeasurementInputs = {
+  sex: Sex;
+  bodyType: BodyType;
+  heightCm: number;
+  waist: BodyProfileAnswers["waist"];
+  bra: BodyProfileAnswers["bra"];
+  /** From the scan the profile is based on, if any */
+  scan?: Measurements;
+};
+
+/** What each measurement is without the user's own number */
+export function suggestionsFor(inputs: MeasurementInputs) {
+  const { sex, bodyType, heightCm, waist, bra, scan } = inputs;
+  const sized = !waist
+    ? null
+    : waist.system === "jeans_inches"
+      ? { waist: waistFromJeans(waist.size) }
+      : waistHipFromDressSize(waist.size);
+  const bust = sex === "female" && bra ? bustFromBra(bra.band, bra.band_system, bra.cup) : null;
+  const base = baseMeasurementsAt(sex, bodyType, heightCm).measurements;
+  const fromSizes = (r: Range): BackendMeasurementValue => ({ ...r, source: "questionnaire" });
+
+  const out: Partial<Record<MeasurementKey, BackendMeasurementValue>> = {};
+  for (const k of allMeasurementKeys(sex)) {
+    if (k === "height") continue;
+    const scanned = scan?.[k];
+    if (scanned != null) out[k] = { value: scanned, source: "scan" };
+    else if (k === "waist" && sized) out[k] = fromSizes(sized.waist);
+    else if (k === "hip" && sized && "hip" in sized) out[k] = fromSizes(sized.hip);
+    else if (k === "bust" && bust) out[k] = fromSizes(bust.bust);
+    else if (k === "underbust" && bust) out[k] = fromSizes(bust.underbust);
+    else if (base[k] != null) out[k] = { value: base[k]!, source: "base" };
+  }
+  return out;
+}
+
+/** The profile's measurements: height, then for the rest the user's own number, else the suggestion */
+export function buildMeasurements(inputs: MeasurementInputs, manual: Measurements) {
+  const measurements: BodyProfileAnswers["measurements"] = {
+    height: { value: inputs.heightCm, source: "manual" }, // always typed in by the user
+  };
+  const suggested = suggestionsFor(inputs);
+  for (const k of allMeasurementKeys(inputs.sex)) {
+    if (k === "height") continue;
+    const own = manual[k];
+    const m = own != null ? { value: own, source: "manual" as const } : suggested[k];
+    if (m) measurements[k] = m;
+  }
+  return measurements;
+}
+
+/** The numbers the user typed in themselves (not height, which every save sets) */
+export function manualMeasurements(profile: BodyProfile | null | undefined): Measurements {
+  const out: Measurements = {};
+  for (const [k, m] of Object.entries(profile?.measurements ?? {})) {
+    if (k !== "height" && m?.source === "manual") out[k as MeasurementKey] = m.value;
+  }
+  return out;
+}
+
+/** The profile's numbers that came from its scan */
+export function scanMeasurementsOf(profile: BodyProfile | null | undefined): Measurements {
+  const out: Measurements = {};
+  for (const [k, m] of Object.entries(profile?.measurements ?? {})) {
+    if (m?.source === "scan") out[k as MeasurementKey] = m.value;
+  }
+  return out;
+}
+
+// ── From a scan ───────────────────────────────────────────────────────────────
+
+// The scan's names (gemini_client.Measurements) for the profile's measurements: every one the scan
+// estimates. Arm length is its upper and lower arm together.
+const FROM_SCAN: Partial<Record<MeasurementKey, string>> = {
+  neck: "neck_circ",
+  shoulder_breadth: "shoulder_breadth",
+  bust: "bust_chest_circ",
+  waist: "waist_circ",
+  hip: "hip_circ",
+  thigh: "thigh_circ",
+  calf: "calf_circ",
+  bicep: "bicep_circ",
+  forearm: "forearm_circ",
+  wrist: "wrist_circ",
+  ankle: "ankle_circ",
+  upper_arm_length: "upper_arm_length",
+  lower_arm_length: "lower_arm_length",
+  upper_leg_length: "upper_leg_length",
+  lower_leg_length: "lower_leg_length",
+  nape_to_waist: "nape_to_waist",
+};
+
+/** A scan's numbers as the profile's measurements, rounded to 0.5 cm; any out of range are left out */
+export function measurementsFromScan(cm: Record<string, number>): Measurements {
+  const out: Measurements = {};
+  const put = (k: MeasurementKey, v: number | undefined) => {
+    const [lo, hi] = MEASUREMENT_LIMITS[k];
+    if (v != null && Number.isFinite(v) && v >= lo && v <= hi) out[k] = Math.round(v * 2) / 2;
+  };
+  for (const [k, name] of Object.entries(FROM_SCAN)) put(k as MeasurementKey, cm[name!]);
+  if (cm.upper_arm_length != null && cm.lower_arm_length != null)
+    put("arm_length", cm.upper_arm_length + cm.lower_arm_length);
+  return out;
+}
+
+/** The base body whose bust, waist and hips (at this height) are nearest these */
+export function closestBodyType(sex: Sex, heightCm: number, m: Measurements): BodyType {
+  let best: BodyType = "average";
+  let bestError = Infinity;
+  for (const t of BODY_TYPES) {
+    const base = baseMeasurementsAt(sex, t.id, heightCm).measurements;
+    let error = 0;
+    for (const k of ["bust", "waist", "hip"] as const) {
+      if (m[k] != null && base[k] != null) error += ((m[k]! - base[k]!) / base[k]!) ** 2;
+    }
+    if (error < bestError) [best, bestError] = [t.id, error];
+  }
+  return best;
+}
+
+/**
+ * A finished scan as the user's twin: its measurements, the base body nearest them (filling in what the
+ * scan doesn't measure), the height and weight entered for it, and anything the user typed in before.
+ */
+export function profileFromScan(
+  scan: BackendMeasurement,
+  existing: BodyProfile | null | undefined,
+  about: AboutYou | null | undefined,
+): BodyProfileAnswers {
+  const g = scan.inputs.gender;
+  const sex: Sex = g === "female" || g === "male" ? g : (existing?.sex ?? about?.sex ?? "female");
+  const heightCm = scan.inputs.height_cm;
+  const scanned = measurementsFromScan(scan.measurements_cm);
+  const bodyType = closestBodyType(sex, heightCm, scanned);
+  const waist = existing?.waist ?? null;
+  const bra = sex === "female" ? (existing?.bra ?? null) : null;
+  return {
+    sex,
+    body_type: bodyType,
+    weight_kg: scan.inputs.weight_kg,
+    waist,
+    bra,
+    measurements: buildMeasurements(
+      { sex, bodyType, heightCm, waist, bra, scan: scanned },
+      manualMeasurements(existing),
+    ),
+    scan_job: scan.job_id,
+  };
 }

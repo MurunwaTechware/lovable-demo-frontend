@@ -38,6 +38,7 @@ import { Route as CommunityStylestreamRouteImport } from './routes/community.sty
 import { Route as ProductIdRouteImport } from './routes/product.$id'
 import { Route as StoresIndexRouteImport } from './routes/stores.index'
 import { Route as StoresNameRouteImport } from './routes/stores.$name'
+import { Route as TwinEditRouteImport } from './routes/twin_.edit'
 import { Route as CommunityProfileIdRouteImport } from './routes/community.profile.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -185,6 +186,11 @@ const StoresNameRoute = StoresNameRouteImport.update({
   path: '/stores/$name',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TwinEditRoute = TwinEditRouteImport.update({
+  id: '/twin_/edit',
+  path: '/twin/edit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CommunityProfileIdRoute = CommunityProfileIdRouteImport.update({
   id: '/profile/$id',
   path: '/profile/$id',
@@ -218,6 +224,7 @@ export interface FileRoutesByFullPath {
   '/community/stylestream': typeof CommunityStylestreamRoute
   '/product/$id': typeof ProductIdRoute
   '/stores/$name': typeof StoresNameRoute
+  '/twin/edit': typeof TwinEditRoute
   '/account/': typeof AccountIndexRoute
   '/community/': typeof CommunityIndexRoute
   '/stores/': typeof StoresIndexRoute
@@ -248,6 +255,7 @@ export interface FileRoutesByTo {
   '/community/stylestream': typeof CommunityStylestreamRoute
   '/product/$id': typeof ProductIdRoute
   '/stores/$name': typeof StoresNameRoute
+  '/twin/edit': typeof TwinEditRoute
   '/account': typeof AccountIndexRoute
   '/community': typeof CommunityIndexRoute
   '/stores': typeof StoresIndexRoute
@@ -281,6 +289,7 @@ export interface FileRoutesById {
   '/community/stylestream': typeof CommunityStylestreamRoute
   '/product/$id': typeof ProductIdRoute
   '/stores/$name': typeof StoresNameRoute
+  '/twin_/edit': typeof TwinEditRoute
   '/account/': typeof AccountIndexRoute
   '/community/': typeof CommunityIndexRoute
   '/stores/': typeof StoresIndexRoute
@@ -315,6 +324,7 @@ export interface FileRouteTypes {
     | '/community/stylestream'
     | '/product/$id'
     | '/stores/$name'
+    | '/twin/edit'
     | '/account/'
     | '/community/'
     | '/stores/'
@@ -345,6 +355,7 @@ export interface FileRouteTypes {
     | '/community/stylestream'
     | '/product/$id'
     | '/stores/$name'
+    | '/twin/edit'
     | '/account'
     | '/community'
     | '/stores'
@@ -377,6 +388,7 @@ export interface FileRouteTypes {
     | '/community/stylestream'
     | '/product/$id'
     | '/stores/$name'
+    | '/twin_/edit'
     | '/account/'
     | '/community/'
     | '/stores/'
@@ -402,6 +414,7 @@ export interface RootRouteChildren {
   WishlistRoute: typeof WishlistRoute
   ProductIdRoute: typeof ProductIdRoute
   StoresNameRoute: typeof StoresNameRoute
+  TwinEditRoute: typeof TwinEditRoute
   StoresIndexRoute: typeof StoresIndexRoute
 }
 
@@ -610,6 +623,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StoresNameRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/twin_/edit': {
+      id: '/twin_/edit'
+      path: '/twin/edit'
+      fullPath: '/twin/edit'
+      preLoaderRoute: typeof TwinEditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/community/profile/$id': {
       id: '/community/profile/$id'
       path: '/profile/$id'
@@ -680,6 +700,7 @@ const rootRouteChildren: RootRouteChildren = {
   WishlistRoute: WishlistRoute,
   ProductIdRoute: ProductIdRoute,
   StoresNameRoute: StoresNameRoute,
+  TwinEditRoute: TwinEditRoute,
   StoresIndexRoute: StoresIndexRoute,
 }
 export const routeTree = rootRouteImport

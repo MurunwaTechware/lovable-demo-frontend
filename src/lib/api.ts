@@ -180,7 +180,12 @@ export type MeasurementKey =
   | "shoulder_to_crotch"
   | "thigh"
   | "calf"
-  | "ankle";
+  | "ankle"
+  | "upper_arm_length"
+  | "lower_arm_length"
+  | "upper_leg_length"
+  | "lower_leg_length"
+  | "nape_to_waist";
 export type BackendMeasurementValue = {
   value: number;
   min?: number | null;
@@ -195,6 +200,8 @@ export type BodyProfileAnswers = {
   waist: { system: "jeans_inches" | "dress_size"; size: number } | null;
   bra: { band: number; band_system: "inches" | "cm"; cup: string } | null;
   measurements: Partial<Record<MeasurementKey, BackendMeasurementValue>>;
+  /** The scan the measurements came from, if they did */
+  scan_job?: string | null;
 };
 export type BodyProfile = BodyProfileAnswers & { version: number; updated_at: string };
 
@@ -208,3 +215,25 @@ export const saveBodyProfile = (answers: BodyProfileAnswers) =>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(answers),
   }).then((r) => r.profile);
+
+// ── About you ─────────────────────────────────────────────────────────────────
+
+/** Onboarding's quick answers, all optional (GET/PUT /me/about-you) */
+export type AboutYouAnswers = {
+  sex: "female" | "male" | null;
+  height_cm: number | null;
+  weight_kg: number | null;
+  favourite_colour: string | null;
+};
+export type AboutYou = AboutYouAnswers & { updated_at: string };
+
+/** GET /me/about-you: null before the user has answered */
+export const getAboutYou = () =>
+  request<{ about: AboutYou | null }>("/me/about-you").then((r) => r.about);
+/** PUT /me/about-you: replaces the answers */
+export const saveAboutYou = (answers: AboutYouAnswers) =>
+  request<{ about: AboutYou }>("/me/about-you", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(answers),
+  }).then((r) => r.about);
