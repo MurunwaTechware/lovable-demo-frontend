@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Check, ChevronDown, Loader2, Ruler } from "lucide-react";
 
@@ -7,6 +7,7 @@ import { HeightField, Kicker, WeightField } from "@/components/body-form-bits";
 import { heightOk, weightOk } from "@/lib/body-form";
 import { useKeepAboutYouInStep } from "@/lib/about-you";
 import type { BodyProfile, BodyType, MeasurementKey } from "@/lib/api";
+import { SOURCE_COUNTS, fitShape } from "@/lib/body-shapes";
 import {
   BODY_TYPES,
   MEASUREMENT_HINTS,
@@ -33,7 +34,9 @@ import {
 // A number typed in here is the user's own and stays through a new scan or questionnaire. The base body
 // (sex and build) and the height can be changed too; the suggestions follow them.
 //
-// The mesh is the chosen base body for now. Reshaping it to the numbers (Anny) comes later.
+// The mesh follows the numbers as they're typed: the base body reshaped with Anny's measurement sliders
+// (lib/body-shapes.ts). Where a number is further than Anny's sliders reach, the row says where the twin
+// lands instead.
 
 export function TwinEditor({ profile, onDone }: { profile: BodyProfile; onDone: () => void }) {
   const [sex, setSex] = useState<Sex>(profile.sex);
@@ -106,10 +109,54 @@ export function TwinEditor({ profile, onDone }: { profile: BodyProfile; onDone: 
     );
   };
 
+  // The twin's shape for the numbers as they are now: each typed number (when it's valid), else the
+  // suggestion. Refitted on every change; it's a few milliseconds.
+  const targetsKey = JSON.stringify([sex, bodyType, heightCm, overrides, suggested]);
+  const fitted = useMemo(() => {
+    const targets: Partial<Record<MeasurementKey, number>> = {
+      height: heightOk(heightCm) ? heightCm : inputs.heightCm,
+    };
+    const counts: Partial<Record<MeasurementKey, number>> = {};
+    for (const k of editableKeys) {
+      const typed = overrides[k];
+      if (typed !== undefined && validOverride(k, typed)) {
+        targets[k] = Number(typed);
+        counts[k] = SOURCE_COUNTS.manual;
+      } else if (suggested[k]) {
+        targets[k] = suggested[k]!.value;
+        counts[k] = SOURCE_COUNTS[suggested[k]!.source];
+      }
+    }
+    return { targets, counts, ...fitShape(sex, bodyType, targets, counts) };
+  }, [targetsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The next build up (for numbers the twin can't reach) or down (for ones it can't get under)
+  const nextBuild = (bigger: boolean): BodyType | null => {
+    const order: BodyType[] = ["slim", "average", "fuller"];
+    return order[order.indexOf(bodyType) + (bigger ? 1 : -1)] ?? null;
+  };
+
   const row = (k: MeasurementKey) => {
     const s = suggested[k];
     const typed = overrides[k];
     const invalid = typed !== undefined && !validOverride(k, typed);
+    // How far the reshaped twin is from this number, when it's more than a centimetre
+    const lands = fitted.predicted[k];
+    // Only for numbers someone gave (typed, scanned, from a size): the base body's own suggestions just
+    // follow the rest. A number from a clothing size is a range, so landing anywhere in it is fine; a
+    // typed or scanned one is exact, so more than a centimetre off is worth saying (a centimetre is within
+    // tape-measure error, and the twin's numbers are rounded to half a centimetre).
+    const given = (fitted.counts[k] ?? 0) > SOURCE_COUNTS.base;
+    const range = typed === undefined && s?.min != null && s?.max != null ? s : null;
+    const off =
+      given &&
+      lands != null &&
+      fitted.targets[k] != null &&
+      (range ? lands < range.min! || lands > range.max! : Math.abs(lands - fitted.targets[k]!) > 1);
+    // Which way it's out: the twin can't get as big as asked (true), or as small
+    const tooSmall = off && lands! < fitted.targets[k]!;
+    // Its own slider all the way (a real limit of this body), or held back by the other numbers
+    const atLimit = (fitted.weights[`${k}${tooSmall ? "+" : "-"}`] ?? 0) > 0.99;
     const [lo, hi] = MEASUREMENT_LIMITS[k];
     return (
       <li key={k} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
@@ -144,6 +191,28 @@ export function TwinEditor({ profile, onDone }: { profile: BodyProfile; onDone: 
                 </>
               ) : null}
             </span>
+            {off && (
+              <span className="block text-[11px] text-[color:var(--plum)] leading-snug tabular-nums">
+                {range
+                  ? `Your twin gets to ${lands} cm, outside your size's ${range.min}–${range.max} cm`
+                  : atLimit
+                    ? `Your twin gets to ${lands} cm: as far as this body goes`
+                    : `Your twin gets to ${lands} cm, balancing this against your other measurements`}
+                {nextBuild(tooSmall) && (
+                  <>
+                    {" "}
+                    ·{" "}
+                    <button
+                      type="button"
+                      onClick={() => setBodyType(nextBuild(tooSmall)!)}
+                      className="underline underline-offset-2"
+                    >
+                      Try {BODY_TYPES.find((t) => t.id === nextBuild(tooSmall))?.label}
+                    </button>
+                  </>
+                )}
+              </span>
+            )}
           </span>
         </span>
         <label className="relative shrink-0">
@@ -169,13 +238,15 @@ export function TwinEditor({ profile, onDone }: { profile: BodyProfile; onDone: 
 
   return (
     <div className="grid md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-      {/* A fixed height, kept in view while the measurements scroll past (the column's own height
-          grows with "More measurements" and would make the camera zoom in) */}
-      <div className="relative bg-secondary/40 h-[360px] md:sticky md:top-20 md:self-start md:h-[calc(100svh-7rem)] md:min-h-[520px] md:max-h-[760px]">
+      {/* A fixed height, kept in view while the measurements scroll past, so the body can be watched
+          changing (on phones too, above the list); the column's own height grows with "More
+          measurements" and would make the camera zoom in */}
+      <div className="sticky top-16 z-10 bg-secondary h-[36svh] min-h-[220px] md:top-20 md:bg-secondary/40 md:self-start md:h-[calc(100svh-7rem)] md:min-h-[520px] md:max-h-[760px]">
         <BodyMesh
           key={mesh.model}
           model={mesh.model}
           image={mesh.image}
+          shape={fitted.weights}
           className="absolute inset-0"
         />
         <div className="absolute top-4 left-4 rounded-full bg-card/90 px-3 py-1 text-[11px] font-medium shadow-sm">

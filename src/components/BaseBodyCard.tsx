@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 
 import { BodyMesh } from "@/components/BodyMesh";
+import type { MeasurementKey } from "@/lib/api";
+import { SOURCE_COUNTS, fitShape } from "@/lib/body-shapes";
 import {
   BODY_TYPES,
   MORE_MEASUREMENTS,
@@ -73,6 +75,15 @@ export function BaseBodyCard() {
   }
 
   const mesh = meshFor(profile.sex, profile.body_type);
+  // The twin as it is: the base body reshaped to the saved measurements
+  const targets: Partial<Record<MeasurementKey, number>> = {};
+  const counts: Partial<Record<MeasurementKey, number>> = {};
+  for (const [k, m] of Object.entries(profile.measurements)) {
+    if (!m) continue;
+    targets[k as MeasurementKey] = m.value;
+    counts[k as MeasurementKey] = SOURCE_COUNTS[m.source];
+  }
+  const shape = fitShape(profile.sex, profile.body_type, targets, counts).weights;
   const names = measurementKeys(profile.sex);
   // Profiles saved before these were added have only the main measurements
   const hasMore = MORE_MEASUREMENTS.some((g) => g.keys.some((k) => profile.measurements[k]));
@@ -83,6 +94,7 @@ export function BaseBodyCard() {
           key={mesh.model}
           model={mesh.model}
           image={mesh.image}
+          shape={shape}
           className="absolute inset-0"
         />
       </div>

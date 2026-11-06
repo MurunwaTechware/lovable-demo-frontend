@@ -133,10 +133,10 @@ def measure(model, anthro, faces, out) -> dict[str, float]:
     h = z1 - z0
     m = {"height": float(a["height"][0]), "waist": float(a["waist_circumference"][0])}
 
-    # Chest: ends at the armpits, where the arms join the torso's slice and its width jumps
+    # Chest: ends at the armpits, where the arms join the torso's slice and its width suddenly jumps (by a
+    # quarter or more from one slice to the next; the chest itself only widens gradually)
     upper = scan(mesh, z0, h, 0.60, 0.85)
-    waist_width = upper[0][2]
-    armpit_f = next((f for f, _, wid in upper if wid > 1.6 * waist_width), 0.80)
+    armpit_f = next((f for (_, _, before), (f, _, wid) in zip(upper, upper[1:]) if wid > 1.25 * before), 0.80)
     chest = [t for t in upper if 0.64 <= t[0] < armpit_f - 0.01]
     bust_f, m["bust"], _ = max(chest, key=lambda t: t[1])
     below_bust = [t for t in chest if bust_f - 0.07 <= t[0] < bust_f - 0.01]

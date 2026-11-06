@@ -2,21 +2,34 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type * as THREE from "three"; // types only: three itself is loaded when the viewer mounts
 
+import type { ShapeWeights } from "@/lib/body-shapes";
+
 // A base body mesh (GLB) the user can turn by dragging; it turns slowly on its own until they do.
 // three.js is loaded only when this is on screen, so other pages don't download it. If WebGL isn't
 // available, the mesh's picture is shown instead.
+//
+// `shape` reshapes it with the GLB's morph targets (Anny's measurement sliders, see lib/body-shapes.ts):
+// they're blended into the vertices here rather than on the graphics card, so the lighting (the normals)
+// follows the new shape. It's a few milliseconds, so it can follow every keystroke.
 
 export function BodyMesh({
   model,
   image,
+  shape,
   className = "relative h-96",
 }: {
   model: string;
   image: string;
+  shape?: ShapeWeights;
   className?: string;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<"loading" | "ready" | "fallback">("loading");
+  // The latest shape, and how to apply it once the mesh has loaded
+  const shapeRef = useRef(shape);
+  shapeRef.current = shape;
+  const applyShape = useRef<((s?: ShapeWeights) => void) | null>(null);
+  useEffect(() => applyShape.current?.(shape), [shape]);
 
   useEffect(() => {
     const el = host.current;
@@ -53,10 +66,17 @@ export function BodyMesh({
         }
         const body = gltf.scene;
         const material = new T.MeshStandardMaterial({ color: 0xd9cdc3, roughness: 0.65 });
+        let mesh: THREE.Mesh | null = null;
         body.traverse((o) => {
-          if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).material = material;
+          if ((o as THREE.Mesh).isMesh) {
+            (o as THREE.Mesh).material = material;
+            mesh ??= o as THREE.Mesh;
+          }
         });
         scene.add(body);
+        if (mesh) applyShape.current = shaper(mesh);
+
+        applyShape.current?.(shapeRef.current);
 
         // Frame the whole body (the meshes stand on the ground, facing the camera)
         const box = new T.Box3().setFromObject(body);
@@ -107,6 +127,7 @@ export function BodyMesh({
         setState("ready");
 
         cleanup = () => {
+          applyShape.current = null;
           cancelAnimationFrame(frame);
           observer.disconnect();
           renderer.domElement.removeEventListener("pointerdown", down);
@@ -151,4 +172,41 @@ export function BodyMesh({
       )}
     </div>
   );
+}
+
+/**
+ * Takes the mesh's morph targets off the graphics card and returns a function that blends them into the
+ * vertices: base + sum(weight x move), then works out the normals again. Targets the mesh doesn't have
+ * are ignored, so an older GLB without them just stays the base body.
+ */
+function shaper(mesh: THREE.Mesh) {
+  const geometry = mesh.geometry;
+  const position = geometry.getAttribute("position");
+  const base = Float32Array.from(position.array as Float32Array);
+  // As metres: the GLB stores them as 16-bit numbers, which getX/Y/Z turn back into metres
+  const moves = (geometry.morphAttributes.position ?? []).map((a) => {
+    const m = new Float32Array(a.count * 3);
+    for (let i = 0; i < a.count; i++) {
+      m[i * 3] = a.getX(i);
+      m[i * 3 + 1] = a.getY(i);
+      m[i * 3 + 2] = a.getZ(i);
+    }
+    return m;
+  });
+  const index = mesh.morphTargetDictionary ?? {};
+  geometry.morphAttributes = {};
+  mesh.updateMorphTargets();
+
+  return (shape?: ShapeWeights) => {
+    const out = position.array as Float32Array;
+    out.set(base);
+    for (const [name, weight] of Object.entries(shape ?? {})) {
+      const move = moves[index[name]];
+      if (!move || !weight) continue;
+      for (let i = 0; i < out.length; i++) out[i] += weight * move[i];
+    }
+    position.needsUpdate = true;
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+  };
 }
