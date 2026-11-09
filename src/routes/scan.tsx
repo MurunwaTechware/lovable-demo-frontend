@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Camera, Check, ImagePlus, Loader2, X, ArrowRight } from "lucide-react";
+import { toast } from "sonner";
 
 import { Nav } from "@/components/Nav";
 import { useQueryClient } from "@tanstack/react-query";
@@ -116,6 +117,7 @@ function ScanPage() {
     const fail = (message: string) => {
       setMeasuring(false);
       setErrors({ form: message });
+      toast.error(message); // same message as a pop-up; the inline banner stays too
       setTimeout(
         () =>
           document
@@ -135,7 +137,10 @@ function ScanPage() {
     setMeasuring(true);
     let jobId: string;
     try {
-      ({ job_id: jobId } = await uploadScan(form));
+      const res = await uploadScan(form);
+      jobId = res.job_id;
+      // Soft, non-blocking notes (e.g. feet cropped off). Show them, but continue.
+      for (const w of res.warnings ?? []) toast.warning(w);
     } catch (err) {
       return fail(err instanceof Error ? err.message : "Upload failed. Please try again.");
     }

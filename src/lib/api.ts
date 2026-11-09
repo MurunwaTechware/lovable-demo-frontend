@@ -70,9 +70,13 @@ export const getProfiles = () => request<BackendProfile[]>("/me/measurement-prof
 export const getMeasurement = (jobId: string) =>
   request<BackendMeasurement>(`/measurements_data/${encodeURIComponent(jobId)}`);
 
-/** POST /process_upload: starts measuring and returns the new job's ID */
+/**
+ * POST /process_upload: starts measuring and returns the new job's ID.
+ * `warnings` are soft, non-blocking notes about the photos (e.g. feet cropped off) —
+ * the upload still succeeded; the page shows them but continues.
+ */
 export const uploadScan = (form: FormData) =>
-  request<{ job_id: string }>("/process_upload", { method: "POST", body: form });
+  request<{ job_id: string; warnings?: string[] }>("/process_upload", { method: "POST", body: form });
 
 /**
  * Waits for a measurement job on GET /job_events/{job} (Server-Sent Events). The server sends exactly
