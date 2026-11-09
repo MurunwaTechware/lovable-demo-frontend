@@ -5,6 +5,7 @@
 // Shapes here are the backend's own (snake_case). twin-store.ts turns them into the app's types.
 
 import { accountStore } from "@/lib/account-store";
+import bodyShapes from "@/lib/body-shapes.json";
 
 export class ApiError extends Error {
   constructor(
@@ -203,18 +204,39 @@ export type BodyProfileAnswers = {
   /** The scan the measurements came from, if they did */
   scan_job?: string | null;
 };
-export type BodyProfile = BodyProfileAnswers & { version: number; updated_at: string };
+/** The twin's mesh, made by the backend on every save (twin_mesh.py) */
+export type TwinMesh = {
+  file: string; // served at /me/twin/<file>
+  base_body: string;
+  weights: Record<string, number>;
+  predicted: Partial<Record<MeasurementKey, number>>;
+  shapes_version: string;
+  app_shapes_version: string | null;
+  made_at: string;
+};
+export type BodyProfile = BodyProfileAnswers & {
+  version: number;
+  updated_at: string;
+  /** null when it couldn't be made (the measurements are still saved) */
+  mesh?: TwinMesh | null;
+};
 
 /** GET /me/body-profile: null before the user has done the questionnaire */
 export const getBodyProfile = () =>
   request<{ profile: BodyProfile | null }>("/me/body-profile").then((r) => r.profile);
-/** PUT /me/body-profile: replaces the user's answers (redoing the questionnaire starts clean) */
+/**
+ * PUT /me/body-profile: replaces the user's twin, and the backend makes its mesh. Says which shape files
+ * the app has, so a mesh built from different ones (the backend's copy out of date) is noted.
+ */
 export const saveBodyProfile = (answers: BodyProfileAnswers) =>
   request<{ profile: BodyProfile }>("/me/body-profile", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(answers),
+    body: JSON.stringify({ ...answers, shapes_version: bodyShapes.version }),
   }).then((r) => r.profile);
+
+/** Where the twin's saved mesh is served */
+export const twinMeshUrl = (mesh: TwinMesh) => `/me/twin/${encodeURIComponent(mesh.file)}`;
 
 // ── About you ─────────────────────────────────────────────────────────────────
 

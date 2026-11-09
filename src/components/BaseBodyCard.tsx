@@ -10,7 +10,8 @@ import {
 } from "lucide-react";
 
 import { BodyMesh } from "@/components/BodyMesh";
-import type { MeasurementKey } from "@/lib/api";
+import { TwinShapeNote } from "@/components/TwinShapeNote";
+import { twinMeshUrl, type MeasurementKey } from "@/lib/api";
 import { SOURCE_COUNTS, fitShape } from "@/lib/body-shapes";
 import {
   BODY_TYPES,
@@ -19,6 +20,7 @@ import {
   measurementName,
   SEXES,
   SOURCE_LABELS,
+  isEstimate,
   meshFor,
   useBodyProfile,
 } from "@/lib/body-profile";
@@ -75,7 +77,9 @@ export function BaseBodyCard() {
   }
 
   const mesh = meshFor(profile.sex, profile.body_type);
-  // The twin as it is: the base body reshaped to the saved measurements
+  // The twin as it is: the mesh the backend saved with the profile. Without one (it couldn't be made, or
+  // the profile is from before meshes were saved), the base body reshaped here to the same measurements.
+  const saved = profile.mesh;
   const targets: Partial<Record<MeasurementKey, number>> = {};
   const counts: Partial<Record<MeasurementKey, number>> = {};
   for (const [k, m] of Object.entries(profile.measurements)) {
@@ -83,7 +87,9 @@ export function BaseBodyCard() {
     targets[k as MeasurementKey] = m.value;
     counts[k as MeasurementKey] = SOURCE_COUNTS[m.source];
   }
-  const shape = fitShape(profile.sex, profile.body_type, targets, counts).weights;
+  const shape = saved
+    ? undefined
+    : fitShape(profile.sex, profile.body_type, targets, counts).weights;
   const names = measurementKeys(profile.sex);
   // Profiles saved before these were added have only the main measurements
   const hasMore = MORE_MEASUREMENTS.some((g) => g.keys.some((k) => profile.measurements[k]));
@@ -91,8 +97,8 @@ export function BaseBodyCard() {
     <div className="mt-6 grid md:grid-cols-[320px_1fr] gap-6 rounded-3xl border border-border bg-card p-5 shadow-[var(--shadow-card)]">
       <div className="relative aspect-[3/4] rounded-2xl bg-secondary/40 overflow-hidden">
         <BodyMesh
-          key={mesh.model}
-          model={mesh.model}
+          key={saved ? saved.file : mesh.model}
+          model={saved ? twinMeshUrl(saved) : mesh.model}
           image={mesh.image}
           shape={shape}
           className="absolute inset-0"
@@ -125,7 +131,12 @@ export function BaseBodyCard() {
                     {measurementName(k, profile.sex)}
                   </div>
                   <div className="mt-1 font-display text-lg tabular-nums">
-                    {m.min != null ? `${m.min}–${m.max} cm` : `${m.value} cm`}
+                    {m.value} cm
+                    {isEstimate(m.source) && (
+                      <span className="text-[color:var(--plum)]" aria-label="estimate">
+                        *
+                      </span>
+                    )}
                   </div>
                   <div className="text-[11px] text-muted-foreground">{SOURCE_LABELS[m.source]}</div>
                 </li>
@@ -163,6 +174,11 @@ export function BaseBodyCard() {
                             </dt>
                             <dd className="text-sm tabular-nums">
                               {m.value} cm
+                              {isEstimate(m.source) && (
+                                <span className="text-[color:var(--plum)]" aria-label="estimate">
+                                  *
+                                </span>
+                              )}
                               {m.source !== "base" && (
                                 <span className="block text-[11px] text-muted-foreground">
                                   {SOURCE_LABELS[m.source]}
@@ -184,6 +200,14 @@ export function BaseBodyCard() {
             </div>
           )}
         </div>
+        {Object.values(profile.measurements).some((m) => m && isEstimate(m.source)) && (
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            <span className="text-[color:var(--plum)]">*</span> An estimate, from your clothing
+            sizes or your base body: it needs your confirmation. Check it with a tape measure, then
+            type your number or press Confirm under Edit measurements.
+          </p>
+        )}
+        <TwinShapeNote className="mt-3" />
         <div className="mt-auto pt-5 flex flex-wrap gap-2">
           <Link
             to="/twin/edit"

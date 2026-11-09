@@ -15,6 +15,7 @@ import {
   type BodyProfileAnswers,
   type BodyType,
   type MeasurementKey,
+  type MeasurementSource,
 } from "@/lib/api";
 import { bustFromBra, waistFromJeans, waistHipFromDressSize, type Range } from "@/lib/body-sizes";
 
@@ -179,6 +180,13 @@ export const MEASUREMENT_LIMITS: Record<MeasurementKey, [number, number]> = {
   lower_leg_length: [25, 65],
   nape_to_waist: [25, 65],
 };
+
+/**
+ * Whether a measurement is only an estimate the user hasn't confirmed: worked out from a clothing size or
+ * taken from the base body. Typed in ("manual") and scanned ones count as theirs.
+ */
+export const isEstimate = (source: MeasurementSource) =>
+  source === "questionnaire" || source === "base";
 
 export const SOURCE_LABELS = {
   base: "From your base body",

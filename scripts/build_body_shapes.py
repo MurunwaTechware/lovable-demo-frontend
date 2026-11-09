@@ -11,7 +11,16 @@ apart), so the base body plus the blended changes is exactly the body Anny makes
 (apart from where it stands: the moves are taken in Anny's rest pose, so the body doesn't drift).
 
     python scripts/build_body_shapes.py <folder with the base OBJs> <public/meshes> <src/lib/body-shapes.json>
+
+The backend builds each user's saved mesh from copies of the same files (its twin_shapes/ folder), so copy
+the six GLBs, body-shapes.json and base-bodies.json there after running this. body-shapes.json's
+"version" (a hash of them all) is what both sides compare, so a stale copy shows up instead of quietly
+building a different body from what the editor showed.
+
+    python scripts/build_body_shapes.py --version <public/meshes> <src/lib/body-shapes.json> <src/lib/base-bodies.json> [--write-version]
+        works out the version again without rebuilding (e.g. to check a copy); --write-version stores it
 """
+import hashlib
 import json
 import os
 import struct
@@ -119,6 +128,18 @@ def add_targets(gltf: dict, binary: bytes, targets: list[tuple[str, np.ndarray]]
     return bytes(out)
 
 
+def shapes_version(mesh_dir: str, effects: dict, base_bodies_path: str) -> str:
+    """A short hash of everything a mesh is built from: the six GLBs, the effects and the base bodies'
+    measurements. The same files give the same version on both sides."""
+    h = hashlib.sha256()
+    for sex in mb.SEXES:
+        for shape in mb.SHAPES:
+            h.update(open(f"{mesh_dir}/{sex}_{shape}.glb", "rb").read())
+    h.update(json.dumps(effects, sort_keys=True).encode())
+    h.update(json.dumps(json.load(open(base_bodies_path)), sort_keys=True).encode())
+    return h.hexdigest()[:12]
+
+
 def main(obj_dir: str, mesh_dir: str, out_path: str) -> None:
     model = anny.Anny(all_phenotypes=True, local_changes="default", remove_unattached_vertices=True)
     model = model.to(dtype=torch.float32, device="cpu")
@@ -168,10 +189,24 @@ def main(obj_dir: str, mesh_dir: str, out_path: str) -> None:
             write_glb(f"{mesh_dir}/{name}.glb", gltf, binary)
             shapes[name] = effects
 
+    base_bodies = os.path.join(os.path.dirname(out_path), "base-bodies.json")
+    write_shapes(out_path, shapes, shapes_version(mesh_dir, shapes, base_bodies))
+
+
+def write_shapes(out_path: str, effects: dict, version: str) -> None:
     with open(out_path, "w") as f:
-        json.dump({"sliders": list(SLIDERS), "effects": shapes}, f, indent=1)
+        json.dump({"version": version, "sliders": list(SLIDERS), "effects": effects}, f, indent=1)
         f.write("\n")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2], sys.argv[3])
+    if sys.argv[1] == "--version":
+        mesh_dir, shapes_path, base_bodies = sys.argv[2:5]
+        data = json.load(open(shapes_path))
+        version = shapes_version(mesh_dir, data["effects"], base_bodies)
+        print(version, "(matches body-shapes.json)" if data.get("version") == version else "(body-shapes.json says "
+              f"{data.get('version')}: write it with --write-version)")
+        if len(sys.argv) > 5 and sys.argv[5] == "--write-version":
+            write_shapes(shapes_path, data["effects"], version)
+    else:
+        main(sys.argv[1], sys.argv[2], sys.argv[3])

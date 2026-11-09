@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Check, ChevronDown, Loader2, Ruler } from "lucide-react";
 
 import { BodyMesh } from "@/components/BodyMesh";
+import { TwinShapeNote } from "@/components/TwinShapeNote";
 import { HeightField, Kicker, WeightField } from "@/components/body-form-bits";
 import { heightOk, weightOk } from "@/lib/body-form";
 import { useKeepAboutYouInStep } from "@/lib/about-you";
@@ -16,6 +17,7 @@ import {
   MORE_MEASUREMENTS,
   SEXES,
   SOURCE_LABELS,
+  isEstimate,
   allMeasurementKeys,
   baseMeasurementsAt,
   buildMeasurements,
@@ -163,7 +165,14 @@ export function TwinEditor({ profile, onDone }: { profile: BodyProfile; onDone: 
         <span className="flex items-start gap-2 min-w-0">
           <Ruler className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--plum)]" />
           <span className="min-w-0">
-            <span className="block">{measurementName(k, sex)}</span>
+            <span className="block">
+              {measurementName(k, sex)}
+              {typed === undefined && s && isEstimate(s.source) && (
+                <span className="text-[color:var(--plum)]" aria-label="estimate">
+                  *
+                </span>
+              )}
+            </span>
             <span className="block text-[11px] text-muted-foreground leading-snug">
               {MEASUREMENT_HINTS[k]}
             </span>
@@ -176,7 +185,10 @@ export function TwinEditor({ profile, onDone }: { profile: BodyProfile; onDone: 
                     onClick={() => setOverride(k, undefined)}
                     className="underline underline-offset-2 hover:text-foreground"
                   >
-                    Use {s ? `${s.value} cm` : "suggestion"}
+                    {/* Confirmed as it was: undoing puts the estimate back */}
+                    {s && Number(typed) === s.value
+                      ? "Undo"
+                      : `Use ${s ? `${s.value} cm` : "suggestion"}`}
                   </button>
                 </>
               ) : s ? (
@@ -187,6 +199,19 @@ export function TwinEditor({ profile, onDone }: { profile: BodyProfile; onDone: 
                       {" "}
                       · {s.min}–{s.max} cm
                     </span>
+                  )}
+                  {isEstimate(s.source) && (
+                    <>
+                      {" "}
+                      ·{" "}
+                      <button
+                        type="button"
+                        onClick={() => setOverride(k, String(s.value))}
+                        className="underline underline-offset-2 hover:text-foreground"
+                      >
+                        Confirm {s.value} cm
+                      </button>
+                    </>
                   )}
                 </>
               ) : null}
@@ -269,6 +294,7 @@ export function TwinEditor({ profile, onDone }: { profile: BodyProfile; onDone: 
             : "These come from your sizes and your base body at your height."}{" "}
           If you know a measurement, type it in: it stays yours, even after a new scan.
         </p>
+        <TwinShapeNote className="mt-4" />
 
         {/* Base body */}
         <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -319,7 +345,29 @@ export function TwinEditor({ profile, onDone }: { profile: BodyProfile; onDone: 
           />
         </div>
 
-        <ul className="mt-6 divide-y divide-border rounded-2xl border border-border">
+        {editableKeys.some(
+          (k) => overrides[k] === undefined && isEstimate(suggested[k]?.source ?? "manual"),
+        ) && (
+          <p className="mt-6 text-[11px] text-muted-foreground">
+            <span className="text-[color:var(--plum)]">*</span> An estimate, from your clothing
+            sizes or your base body. Check it with a tape measure: type your number, or press
+            Confirm if it's right.{" "}
+            <button
+              type="button"
+              onClick={() => {
+                for (const k of editableKeys) {
+                  const sk = suggested[k];
+                  if (overrides[k] === undefined && sk && isEstimate(sk.source))
+                    setOverride(k, String(sk.value));
+                }
+              }}
+              className="underline underline-offset-2 hover:text-foreground"
+            >
+              Confirm all
+            </button>
+          </p>
+        )}
+        <ul className="mt-3 divide-y divide-border rounded-2xl border border-border">
           {mainKeys.map(row)}
         </ul>
 

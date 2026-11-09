@@ -28,17 +28,22 @@ export type FittedShape = {
   predicted: Partial<Record<MeasurementKey, number>>;
 };
 
-const ROUNDS = 60;
+const ROUNDS = 80;
 const STAY_PUT = 0.02; // prefers leaving a slider at 0 when moving it hardly helps
 const HEIGHT_COUNTS = 4; // height counts most, so the legs and torso trade off around it
+// A miss bigger than this (cm) pulls no harder as it grows. Otherwise a number the twin can't reach would
+// keep pulling until it bent everything else out of shape (shorter legs and torso for half a centimetre
+// more waist); like this, its own slider goes all the way and the rest of the body stays as it is.
+const MISS_LIMIT = 1.5;
 
 /**
  * How much a cm off counts, by where the number came from. A number the user typed counts most: it's on
  * purpose, and the twin should give way elsewhere for it. A scan's next. A clothing size is a rough range,
- * so it gives way to both. The base body's own suggestions hardly count at all, so they simply follow
- * (pushing the waist out also moves the underbust, and that's fine when nobody gave an underbust).
+ * so it gives way to both. The base body's own suggestions count least, so they give way (pushing the
+ * waist out also moves the underbust, and that's fine when nobody gave an underbust) but still hold the
+ * body's proportions.
  */
-export const SOURCE_COUNTS = { manual: 3, scan: 1, questionnaire: 0.7, base: 0.1 } as const;
+export const SOURCE_COUNTS = { manual: 3, scan: 1, questionnaire: 0.7, base: 0.3 } as const;
 
 /**
  * The slider settings for these measurements (cm, at the user's height). Measurements are scaled to the
@@ -82,9 +87,14 @@ export function fitShape(
       const before = w[s];
       // What's left for this slider to fix, without its own part
       const residual: Partial<Record<MeasurementKey, number>> = {};
+      // How much each counts this time: less for a big miss as it stands now (see MISS_LIMIT)
+      const pull: Partial<Record<MeasurementKey, number>> = {};
       for (const k of keys) {
+        const now = predictAt(k);
         const own = (effect(s, before)[k] ?? 0) * Math.abs(before);
-        residual[k] = predictAt(k) - own - goal[k]!;
+        residual[k] = now - own - goal[k]!;
+        const miss = Math.abs(now - goal[k]!);
+        pull[k] = importance(k) * (miss <= MISS_LIMIT ? 1 : MISS_LIMIT / miss);
       }
       let best = { amount: 0, cost: Infinity };
       for (const side of [1, -1]) {
@@ -93,14 +103,14 @@ export function fitShape(
         let den = STAY_PUT;
         for (const k of keys) {
           const ek = e[k] ?? 0;
-          const imp = importance(k);
+          const imp = pull[k]!;
           num += imp * residual[k]! * ek;
           den += imp * ek * ek;
         }
         const a = Math.min(1, Math.max(0, -num / den)); // how far along this side, 0..1
         let cost = STAY_PUT * a * a;
         for (const k of keys) {
-          const imp = importance(k);
+          const imp = pull[k]!;
           cost += imp * (residual[k]! + a * (e[k] ?? 0)) ** 2;
         }
         if (cost < best.cost) best = { amount: side * a, cost };
